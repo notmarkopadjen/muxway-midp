@@ -6,7 +6,11 @@ package muxway;
  * footer wait until asked for, and the box stays at the bottom.
  */
 final class ClaudeCode implements Lens {
-    public String[][] shape(String[] rows, boolean reveal) {
+    public String name() {
+        return "Claude Code";
+    }
+
+    public String[][] shape(String[] rows, boolean reveal, boolean forced) {
         int below = -1, above = -1;
         for (int i = rows.length - 1; i >= 0 && above < 0; i--) {
             if (rule(rows[i])) {
@@ -18,7 +22,7 @@ final class ClaudeCode implements Lens {
             }
         }
         if (above < 0) {
-            return null;
+            return forced ? prompt(rows, reveal) : null;
         }
         // The status is right-aligned, so it starts with spaces.
         int status = above > 0 && rows[above - 1].startsWith("        ") ? above - 1 : above;
@@ -47,17 +51,41 @@ final class ClaudeCode implements Lens {
         return new String[][] {body, pinned};
     }
 
-    /** A row of nothing but horizontal lines, three or more. */
+    /** Without rules, the last prompt row near the bottom is the box and what follows it is footer. */
+    private static String[][] prompt(String[] rows, boolean reveal) {
+        int box = -1;
+        for (int i = rows.length - 1; i >= 0 && i >= rows.length - 8 && box < 0; i--) {
+            if (rows[i].startsWith("❯") || rows[i].startsWith("> ") || rows[i].equals(">")) {
+                box = i;
+            }
+        }
+        if (box < 0) {
+            return null;
+        }
+        int end = box;
+        while (end > 0 && rows[end - 1].length() == 0) {
+            end--;
+        }
+        String[] body = new String[end];
+        System.arraycopy(rows, 0, body, 0, end);
+        String[] pinned = new String[reveal ? rows.length - box : 1];
+        System.arraycopy(rows, box, pinned, 0, pinned.length);
+        return new String[][] {body, pinned};
+    }
+
+    /** A row of nothing but horizontal lines: three or more line characters, or twenty dashes once the hub spelt them in ASCII. */
     static boolean rule(String s) {
-        int n = 0;
+        int lines = 0, dashes = 0;
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
-            if (c == '\u2500' || c == '\u2501' || c == '\u2550') {
-                n++;
+            if (c == '─' || c == '━' || c == '═') {
+                lines++;
+            } else if (c == '-' || c == '=') {
+                dashes++;
             } else if (c != ' ') {
                 return false;
             }
         }
-        return n >= 3;
+        return lines >= 3 || (lines == 0 && dashes >= 20);
     }
 }

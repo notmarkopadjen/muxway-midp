@@ -42,10 +42,14 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final TextField token = new TextField("Token", "", 64, TextField.PASSWORD);
     private final TextField width = new TextField("Width, 0 = fit", "", 3, TextField.NUMERIC);
     private final TextField refresh = new TextField("Auto refresh, s", "", 3, TextField.NUMERIC);
-    private final ChoiceGroup viewChoice = new ChoiceGroup("View", ChoiceGroup.EXCLUSIVE,
-        new String[] {"Auto", "Plain"}, null);
+    private final ChoiceGroup textChoice = new ChoiceGroup("Text", ChoiceGroup.EXCLUSIVE,
+        new String[] {"Unicode", "Latin-1", "ASCII"}, null);
     private final StringItem help = new StringItem("Keys",
         "2/8 scroll, 5 reply, 0 keys, # title and position, * hidden rows, call key Enter");
+
+    // One pane's own view, picked from a list reached from its menu; made
+    // afresh for each pane, since MIDP 1.0 cannot retitle a screen.
+    private List pane;
 
     private final List panes = new List("muxway", List.IMPLICIT);
     private final Vector addresses = new Vector();
@@ -67,6 +71,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Command refreshCmd = new Command("Refresh", Command.SCREEN, 3);
     private final Command autoCmd = new Command("Auto", Command.SCREEN, 4);
     private final Command back = new Command("Back", Command.BACK, 2);
+    private final Command paneCmd = new Command("Pane", Command.SCREEN, 5);
     private final Command settings = new Command("Settings", Command.SCREEN, 6);
     private final Command exit = new Command("Exit", Command.EXIT, 9);
 
@@ -84,7 +89,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         setup.append(token);
         setup.append(width);
         setup.append(refresh);
-        setup.append(viewChoice);
+        setup.append(textChoice);
         setup.append(help);
         setup.addCommand(ok);
         setup.addCommand(exit);
@@ -130,7 +135,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 if (r != null) {
                     prefs.refresh = Math.max(0, Math.min(600, Text.toInt(r, 0)));
                 }
-                prefs.view = "plain".equals(getAppProperty("Muxway-View")) ? 1 : 0;
+                String x = getAppProperty("Muxway-Text");
+                if (x != null) {
+                    prefs.text = x.equals("ascii") ? 2 : x.equals("latin1") ? 1 : x.equals("unicode") ? 0 : prefs.text;
+                }
                 prefs.save();
             }
         }
@@ -157,6 +165,19 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             showSetup();
         } else if (d == setup && c == ok) {
             saveSetup();
+        } else if (d == view && c == paneCmd) {
+            pane = new List(view.title, List.IMPLICIT, viewNames(), null);
+            pane.setSelectedIndex(Math.min(prefs.view(view.address), pane.size() - 1), true);
+            pane.addCommand(back);
+            pane.setCommandListener(this);
+            display.setCurrent(pane);
+        } else if (d == pane && c == List.SELECT_COMMAND) {
+            int v = pane.getSelectedIndex();
+            prefs.setView(view.address, v);
+            prefs.save();
+            Trace.show("Pane view " + v);
+            view.setMode(v);
+            display.setCurrent(view);
         } else if (d == panes && c == List.SELECT_COMMAND) {
             int i = panes.getSelectedIndex();
             if (i >= 0 && i < addresses.size()) {
@@ -217,7 +238,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         prefs.width = Math.max(0, Math.min(400, Text.toInt(width.getString(), 0)));
         prefs.refresh = Math.max(0, Math.min(600, Text.toInt(refresh.getString(), 0)));
-        prefs.view = viewChoice.getSelectedIndex();
+        prefs.text = textChoice.getSelectedIndex();
         prefs.save();
         if (prefs.ready()) {
             start(LIST, null);
@@ -245,7 +266,18 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         token.setString("");
         width.setString(Integer.toString(prefs.width));
         refresh.setString(Integer.toString(prefs.refresh));
-        viewChoice.setSelectedIndex(prefs.view == 1 ? 1 : 0, true);
+        textChoice.setSelectedIndex(prefs.text, true);
+    }
+
+    /** Auto, Plain, then every lens by name. */
+    private static String[] viewNames() {
+        String[] names = new String[2 + LENSES.length];
+        names[0] = "Auto";
+        names[1] = "Plain";
+        for (int i = 0; i < LENSES.length; i++) {
+            names[2 + i] = LENSES[i].name();
+        }
+        return names;
     }
 
     private void open(int i) {
@@ -256,15 +288,15 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view.title = address.substring(address.indexOf('/') + 1);
         view.writable = canWrite;
         view.cols = prefs.width;
-        if (prefs.view == 0) {
-            view.lenses = LENSES;
-        }
+        view.lenses = LENSES;
+        view.mode = prefs.view(address);
         if (canWrite) {
             view.addCommand(replyCmd);
             view.addCommand(keysCmd);
         }
         view.addCommand(refreshCmd);
         view.addCommand(autoCmd);
+        view.addCommand(paneCmd);
         view.addCommand(back);
         view.addCommand(settings);
         view.addCommand(exit);
@@ -366,7 +398,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 list();
                 break;
             case OPEN:
-                for (int i = 0; i < 20 && view.columns() == 0; i++) {
+                for (int i = 0; i < 20 && !view.ready(); i++) {
                     Thread.sleep(50);
                 }
                 read(null);
@@ -455,7 +487,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             return;
         }
         // The rows as they are on the terminal; the phone wraps them itself.
-        String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=400";
+        String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=400"
+            + (prefs.text == 1 ? "&charset=latin1" : prefs.text == 2 ? "&charset=ascii" : "");
         int status = api.call(path, null, ifNoneMatch);
         if (status == 304) {
             return;

@@ -8,6 +8,7 @@ puts on screen (Muxway-Trace: 1) is read from the emulator's output.
 
 import http.client
 import http.server
+import urllib.parse
 import json
 import os
 import re
@@ -149,6 +150,22 @@ class Core:
 
 # --- relay -------------------------------------------------------------------------
 
+# What the hub makes of Claude Code's characters for a Latin-1 or ASCII phone.
+ASCII_ART = {"\u2500": "-", "\u2501": "-", "\u2550": "=", "\u276f": ">", "\u25cf": "*", "\u00b7": ".",
+             "\u23f5": ">", "\u2190": "<", "\u2192": ">", "\u2026": "..."}
+
+
+def spelt(screen, path):
+    """The screen the way the hub answers the charset in the request's query:
+    body bytes and headers."""
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
+    charset = query.get("charset", ["utf-8"])[0]
+    if charset == "utf-8":
+        return screen.encode(), {"Content-Type": "text/plain; charset=utf-8"}
+    out = "".join(ASCII_ART.get(c, c if ord(c) < (256 if charset == "latin1" else 128) else "?") for c in screen)
+    mime = "iso-8859-1" if charset == "latin1" else "us-ascii"
+    return out.encode("latin-1"), {"Content-Type": f"text/plain; charset={mime}"}
+
 class Relay:
     """A plain-HTTP relay in front of the hub, like the one an old phone needs.
     Modes make it misbehave on purpose for the security tests."""
@@ -177,10 +194,18 @@ class Relay:
                     return self.reply(200, b"x" * (1 << 20) + b"\n", {})
                 if relay.mode == "garbage" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     return self.reply(200, b"ok \xff\xfe\xc3 \x1b[31mred\x1b[0m \x07bell \x00nul\r\nend\n", {})
-                if relay.mode == "claude" and self.command == "GET" and self.path.startswith("/v1/panes/"):
-                    return self.reply(200, (FIXTURES / "claude-code.txt").read_bytes(), {"Content-Type": "text/plain"})
+                if relay.mode in ("claude", "claude-norules") and self.command == "GET" and self.path.startswith("/v1/panes/"):
+                    screen = (FIXTURES / "claude-code.txt").read_text()
+                    if relay.mode == "claude-norules":
+                        screen = "\n".join(r for r in screen.split("\n") if not r.startswith("\u2500"))
+                    return self.reply(200, *spelt(screen, self.path))
                 if relay.mode == "claude-hostile" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     return self.reply(200, hostile_claude_screen(), {"Content-Type": "text/plain"})
+                if relay.mode == "charset-hostile" and self.command == "GET" and self.path.startswith("/v1/panes/"):
+                    # A relay that lies about the charset: the app must decode as UTF-8 and stay up.
+                    n = len(relay.requests) % 3
+                    lie = ["text/plain; charset=utf-7", "text/plain; charset=../../etc", "text/plain; charset=" + "x" * 300][n]
+                    return self.reply(200, (FIXTURES / "claude-code.txt").read_bytes(), {"Content-Type": lie})
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection")}
                 c = http.client.HTTPConnection(relay.hub, timeout=20)
                 c.request(self.command, self.path, body=body or None, headers=headers)

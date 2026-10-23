@@ -14,7 +14,7 @@ to be typed on the keypad:
 | `Muxway-Server` | base URL the app calls, e.g. `http://relay.example.com` (no `/v1`) |
 | `Muxway-Token` | the phone's token; stored on first start, never shown again |
 | `Muxway-Refresh` | seconds between automatic refreshes, 0 for off |
-| `Muxway-View` | `auto` (default) lets [lenses](lenses.md) recognise the program in a pane; `plain` shows every pane as it is |
+| `Muxway-Text` | how the hub spells what the phone cannot show: `unicode`, `latin1` or `ascii`; the MIDP 1.0 build defaults to `latin1`, the 2.0 build to `unicode` (see [lenses](lenses.md)) |
 
 A JAD that carries a token is itself a secret: serve it once, to the right
 phone, without caching.

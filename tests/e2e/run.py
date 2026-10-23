@@ -64,7 +64,7 @@ class Run:
 
 
 def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*", write=f"{HOST}/*",
-          props=None, revoke=False):
+          props=None, revoke=False, before=None):
     logs = run.logs(name)
     core = Core(run, run.binary, logs).start(expose=expose)
     run.cleanups.append(core.close)
@@ -73,6 +73,8 @@ def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*",
         core.revoke_all()
     relay = Relay(core.url, logs, mode)
     run.cleanups.append(relay.close)
+    if before:
+        before(core)  # the tmux side a test wants in place before the phone looks
     all_props = {"Muxway-Server": relay.url, "Muxway-Token": tok}
     all_props.update(props or {})
     phone = Phone(run, name, profile, all_props)
@@ -173,6 +175,22 @@ def s05(run, name, profile):
     phone.menu(2)
     phone.expect(r"^work/0\.0: \$", "back to normal")
     check("Exception" not in open(phone.out, errors="replace").read(), "the app threw")
+
+
+@test("S08", "A relay that lies about the charset: decoded as UTF-8, the app stays up", "e2e-security")
+def s08(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="charset-hostile")
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: .*Claude Code", "content")
+    for i in range(3):
+        if i:
+            phone.menu(2)  # Refresh: the next lie
+            time.sleep(1.5)
+        rows = phone.rows_after(0, "drawn")
+        check(any(r.startswith("\u276f fix the typo") for r in rows), f"lie {i}: not decoded as UTF-8: {rows}")
+    check(not any("Exception" in line or "Error" in line for line in phone.trace()), "the app failed")
+    phone.shot("lied-to")
 
 
 @test("S06", "Hostile Claude-like screen: 400-column and a thousand rules, control characters, a lying footer",
@@ -299,9 +317,10 @@ def f14(run, name, profile):
     phone.click("select")
     phone.expect(r"^work/0\.0: .*Claude Code", "content")
     rows = phone.rows_after(0, "drawn")
-    box = [i for i, r in enumerate(rows) if r.startswith("\u276f fix the typo")]
+    # The small build asks for Latin-1, so the hub (here the relay) spells the prompt as >.
+    box = [i for i, r in enumerate(rows) if r.startswith(("\u276f fix the typo", "> fix the typo"))]
     check(box and box[0] >= len(rows) - 2, f"input box not at the bottom: {rows}")
-    check(not any("\u2500" in r for r in rows), f"a rule is shown: {rows}")
+    check(not any("\u2500" in r or "----" in r for r in rows), f"a rule is shown: {rows}")
     check(not any("shift+tab" in r or "/effort" in r for r in rows), f"footer or status shown: {rows}")
     check(rows[box[0] - 1].strip(), f"blank row above the box: {rows}")
     time.sleep(1)
@@ -367,6 +386,90 @@ def f16(run, name, profile):
     wait_for("shift-tab typed", lambda: "^[[Z" in core.pane())
     phone.expect(r"^work/0\.0: .*\^\[\[Z", "pane shows the escape")
     phone.shot("typed")
+
+
+def second_pane(core):
+    core.tmux_cmd("split-window", "-t", "work:0.0", "bash --norc --noprofile")
+    core.cli("expose", "--tmux-name", core.tmux, "-t", "work:0.1", "--write")
+
+
+@test("F17", "Pane: View set to Plain for one pane shows its rules, is kept, and leaves other panes alone",
+      "e2e-ui")
+def f17(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="claude", before=second_pane)
+    phone.expect(r"^Panes: .*work/0\.1", "pane list with two panes")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: .*Claude Code", "content")
+    rows = phone.rows_after(0, "drawn")
+    check(not any("shift+tab" in r for r in rows), f"Auto did not hide the footer: {rows}")
+    phone.menu(4)  # Pane
+    time.sleep(1)
+    phone.shot("pane-view")
+    phone.key("Down")  # Plain
+    n = len(phone.trace())
+    phone.click("select")
+    phone.expect(r"^Pane view 1$", "plain chosen")
+    rows = phone.rows_after(n, "plain")
+    check(any("shift+tab" in r for r in rows), f"Plain still hides the footer: {rows}")
+    phone.shot("plain")
+    # Kept across a reopen; the second pane is still Auto.
+    phone.menu(1)  # Back
+    phone.expect(r"^Panes: ", "pane list again")
+    n = len(phone.trace())
+    phone.click("select")
+    rows = phone.rows_after(n, "reopened")
+    check(any("shift+tab" in r for r in rows), f"the pane forgot Plain: {rows}")
+    phone.menu(1)
+    phone.expect(r"^Panes: ", "pane list once more")
+    phone.key("Down")
+    n = len(phone.trace())
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1", "second pane")
+    rows = phone.rows_after(n, "second pane drawn")
+    check(not any("shift+tab" in r for r in rows), f"Plain leaked to another pane: {rows}")
+
+
+@test("F18", "Pane: View set to Claude Code pins the prompt row of a screen without rules", "e2e-ui")
+def f18(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="claude-norules")
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: .*Claude Code", "content")
+    rows = phone.rows_after(0, "drawn")
+    check(any("shift+tab" in r for r in rows), f"Auto hid rows of a screen it cannot know: {rows}")
+    phone.menu(4)  # Pane
+    time.sleep(1)
+    phone.key("Down", "Down")  # Claude Code
+    n = len(phone.trace())
+    phone.click("select")
+    phone.expect(r"^Pane view 2$", "lens chosen")
+    rows = phone.rows_after(n, "forced")
+    box = [i for i, r in enumerate(rows) if r.startswith(("\u276f fix the typo", "> fix the typo"))]
+    check(box and box[0] >= len(rows) - 2, f"prompt row not pinned: {rows}")
+    check(not any("shift+tab" in r for r in rows), f"footer shown: {rows}")
+    phone.shot("forced")
+    n = len(phone.trace())
+    phone.click("star")
+    rows = phone.rows_after(n, "revealed")
+    check(any("shift+tab" in r for r in rows), f"* did not reveal the footer: {rows}")
+
+
+@test("F19", "Text: the small build asks for Latin-1 and reads the hub's spelling, the large one asks for nothing",
+      "e2e")
+def f19(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="claude")
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: .*Claude Code", "content")
+    charsets = [m.group(1) for r in relay.requests for m in [re.search(r"[?&]charset=([a-z0-9-]+)", r["path"])] if m]
+    rows = phone.rows_after(0, "drawn")
+    if profile == "midp1":
+        check(charsets and charsets[0] == "latin1", f"asked for {charsets[:1]}, expected latin1")
+        check(any(r.startswith("> fix the typo") for r in rows), f"the ASCII prompt is not shown: {rows}")
+        check(not any("\u276f" in r or "\u2500" in r for r in rows), f"Unicode on a Latin-1 phone: {rows}")
+    else:
+        check(not charsets, f"asked for a charset: {charsets}")
+        check(any(r.startswith("\u276f fix the typo") for r in rows), f"the prompt is not shown: {rows}")
 
 
 @test("J13", "Without settings in the install file the app opens Settings", "e2e-ui")

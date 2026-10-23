@@ -47,6 +47,36 @@ final class Text {
         return out;
     }
 
+    /**
+     * Cuts rows where the next character would not fit in max pixels.
+     * widths holds the width of each character below its length, wide the
+     * width of any other; max of 0 leaves the rows.
+     */
+    static String[] wrap(String[] rows, int[] widths, int wide, int max) {
+        if (max <= 0) {
+            return rows;
+        }
+        java.util.Vector out = new java.util.Vector();
+        for (int i = 0; i < rows.length; i++) {
+            String r = rows[i];
+            int from = 0, px = 0;
+            for (int j = 0; j < r.length(); j++) {
+                char c = r.charAt(j);
+                int w = c < widths.length ? widths[c] : wide;
+                if (px + w > max && j > from) {
+                    out.addElement(r.substring(from, j));
+                    from = j;
+                    px = 0;
+                }
+                px += w;
+            }
+            out.addElement(r.substring(from));
+        }
+        String[] a = new String[out.size()];
+        out.copyInto(a);
+        return a;
+    }
+
     static int toInt(String s, int fallback) {
         try {
             return Integer.parseInt(s.trim());

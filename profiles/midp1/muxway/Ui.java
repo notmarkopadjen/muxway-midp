@@ -7,6 +7,9 @@ final class Ui {
     // enough for the phone's heap and a slow link.
     static final int LINES = 40;
 
+    // Latin-1 from the hub: these phones have no glyphs for lines and bullets.
+    static final int TEXT = 1;
+
     private Ui() {
     }
 }

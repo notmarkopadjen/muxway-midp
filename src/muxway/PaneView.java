@@ -10,7 +10,8 @@ import javax.microedition.lcdui.Image;
  * monospace font, bottom-aligned, with the rows a lens pinned under them.
  * Title and scroll position are an overlay shown on #. The size is taken
  * from the first full paint, because Canvas.getWidth binds to a class MIDP
- * 1.0 phones do not have it on.
+ * 1.0 phones do not have it on. Rows arrive on the network thread and are
+ * drawn on the phone's, so shaping and scrolling hold the view's lock.
  */
 final class PaneView extends Canvas {
     static final int ENTER = 1, REPLY = 2, KEYS = 3;
@@ -26,13 +27,19 @@ final class PaneView extends Canvas {
     String address = "";
     boolean writable;
     Lens[] lenses = new Lens[0];
-    // Wrap width in columns; 0 fits the screen.
+    // Wrap width in columns; 0 fits the screen by measured pixels.
     int cols;
+    // 0 asks every lens, 1 none, 2 and up forces one lens by its number.
+    int mode;
 
     private String[] raw = new String[0];
     private String[] body = new String[0];
     private String[] pinned = new String[0];
-    private int wrapped;
+    private int shapedCols = -1;
+    private int shapedWidth = -1;
+    private int[] shapedWidths;
+    // Pixel width of each character below 256, measured on the paint thread.
+    private int[] widths;
     private int offset;
     private boolean reveal;
     private boolean info;
@@ -51,7 +58,12 @@ final class PaneView extends Canvas {
         return width > 0 && w > 0 ? Math.max(8, width / w) : 0;
     }
 
-    void setText(String text) {
+    /** True once the first paint has measured the screen, and the font when rows are wrapped by pixels. */
+    boolean ready() {
+        return width > 0 && (cols > 0 || widths != null);
+    }
+
+    synchronized void setText(String text) {
         String[] all = Text.split(text, '\n');
         int n = all.length;
         while (n > 0 && all[n - 1].length() == 0) {
@@ -71,19 +83,42 @@ final class PaneView extends Canvas {
         repaint();
     }
 
-    private int wrapAt() {
-        return cols > 0 ? cols : columns();
+    /** Changes the view (see mode) and redraws. */
+    synchronized void setMode(int m) {
+        mode = m;
+        shape();
+        show();
     }
 
-    private void shape() {
+    private synchronized void toggleReveal() {
+        reveal = !reveal;
+        shape();
+        show();
+    }
+
+    private synchronized void shape() {
         String[][] shaped = null;
-        for (int i = 0; i < lenses.length && shaped == null; i++) {
-            shaped = lenses[i].shape(raw, reveal);
+        if (mode >= 2 && mode - 2 < lenses.length) {
+            shaped = lenses[mode - 2].shape(raw, reveal, true);
+        } else if (mode == 0) {
+            for (int i = 0; i < lenses.length && shaped == null; i++) {
+                shaped = lenses[i].shape(raw, reveal, false);
+            }
         }
-        wrapped = wrapAt();
-        body = Text.wrap(shaped == null ? raw : shaped[0], wrapped);
-        pinned = Text.wrap(shaped == null ? new String[0] : shaped[1], wrapped);
+        shapedCols = cols;
+        shapedWidth = width;
+        shapedWidths = widths;
+        body = wrap(shaped == null ? raw : shaped[0]);
+        pinned = wrap(shaped == null ? new String[0] : shaped[1]);
         offset = Math.min(offset, Math.max(0, body.length - bodyRows()));
+    }
+
+    /** At the set columns, or by pixels: the phone's "monospace" face is not. */
+    private String[] wrap(String[] rows) {
+        if (cols > 0) {
+            return Text.wrap(rows, cols);
+        }
+        return widths == null ? rows : Text.wrap(rows, widths, widths['M'], width);
     }
 
     private int rows() {
@@ -99,7 +134,7 @@ final class PaneView extends Canvas {
     }
 
     /** What is on screen, top to bottom: the body ends where the pinned rows start. */
-    private String[] visible() {
+    private synchronized String[] visible() {
         int n = rows(), pin = pinRows(), top = n - pin;
         String[] out = new String[n];
         int last = body.length - offset;
@@ -114,6 +149,11 @@ final class PaneView extends Canvas {
     }
 
     private void show() {
+        trace();
+        repaint();
+    }
+
+    private void trace() {
         if (Trace.on) {
             String[] v = visible();
             StringBuffer s = new StringBuffer("Rows: ");
@@ -125,7 +165,6 @@ final class PaneView extends Canvas {
             }
             Trace.show(s.toString());
         }
-        repaint();
     }
 
     protected void paint(Graphics g) {
@@ -133,8 +172,16 @@ final class PaneView extends Canvas {
             width = Math.max(width, g.getClipWidth());
             height = Math.max(height, g.getClipHeight());
         }
-        if (wrapped != wrapAt()) {
+        if (widths == null && width > 0 && cols == 0) {
+            int[] measured = new int[256];
+            for (int c = 0; c < measured.length; c++) {
+                measured[c] = font.charWidth((char) c);
+            }
+            widths = measured;
+        }
+        if (shapedCols != cols || shapedWidth != width || shapedWidths != widths) {
             shape();
+            trace();
         }
         int w = width, h = height, lh = font.getHeight(), n = rows();
         int y0 = h - n * lh;
@@ -193,9 +240,7 @@ final class PaneView extends Canvas {
             repaint();
             return;
         case KEY_STAR:
-            reveal = !reveal;
-            shape();
-            show();
+            toggleReveal();
             return;
         case SEND_KEY:
             if (writable) {
@@ -222,7 +267,7 @@ final class PaneView extends Canvas {
         }
     }
 
-    private void scroll(int by) {
+    private synchronized void scroll(int by) {
         int next = Math.max(0, Math.min(offset + by, Math.max(0, body.length - bodyRows())));
         if (next != offset) {
             offset = next;

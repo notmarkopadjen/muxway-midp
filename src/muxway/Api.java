@@ -61,7 +61,8 @@ final class Api {
                     throw e;
                 }
             }
-            body = status == HttpConnection.HTTP_NO_CONTENT || status == 304 ? "" : Text.screen(decode(raw));
+            body = status == HttpConnection.HTTP_NO_CONTENT || status == 304 ? ""
+                : Text.screen(decode(raw, encoding(c.getHeaderField("Content-Type"))));
             return status;
         } finally {
             if (in != null) {
@@ -96,9 +97,15 @@ final class Api {
         }
     }
 
-    private static String decode(byte[] raw) {
+    /** The encoding a Content-Type names: Latin-1 and ASCII as the hub spells them, UTF-8 for anything else. */
+    static String encoding(String contentType) {
+        String t = contentType == null ? "" : contentType.toLowerCase();
+        return t.indexOf("charset=iso-8859-1") >= 0 || t.indexOf("charset=us-ascii") >= 0 ? "ISO-8859-1" : "UTF-8";
+    }
+
+    private static String decode(byte[] raw, String encoding) {
         try {
-            return new String(raw, "UTF-8");
+            return new String(raw, encoding);
         } catch (IOException e) {
             return new String(raw);
         }

@@ -27,7 +27,7 @@ HTTPS. See [the relay page](features/relay.md).
 | `src/muxway/PaneView.java` | the pane, drawn on a Canvas over the whole screen |
 | `src/muxway/Lens.java`, `src/muxway/ClaudeCode.java` | lenses: per-program reshaping of a pane's rows ([lenses](features/lenses.md)) |
 | `src/muxway/Api.java` | the four protocol calls, limits, error messages |
-| `src/muxway/Prefs.java` | settings in the record store |
+| `src/muxway/Prefs.java` | settings, and each pane's view, in the record store |
 | `src/muxway/Text.java` | string helpers CLDC 1.0 lacks, filters for screen and input |
 | `src/muxway/Trace.java` | test-only record of what reaches the screen |
 | `profiles/midp1`, `profiles/midp2` | the few lines that differ per build |
@@ -86,7 +86,7 @@ sequenceDiagram
     S-->>J: 204 (or 200 ok through a relay)
     J->>S: POST input {"key": "Enter"}
     S-->>J: 204
-    J->>S: GET pane (text, width=400)
+    J->>S: GET pane (text, width=400, charset for small phones)
     S-->>J: 200 lines
     J->>M: show lines
     W-->>M: nothing to do (job finished)

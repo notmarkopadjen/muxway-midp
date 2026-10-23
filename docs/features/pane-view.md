@@ -1,9 +1,9 @@
 # The pane view
 
 The pane fills the whole screen. There is no title bar and no scroll
-marker: the pane's rows are drawn in a monospace font from the left edge,
-bottom-aligned, so the last row is always a full one and the spare pixels
-sit at the top. On a 96x65 screen that is six rows of sixteen to nineteen
+marker: the pane's rows are drawn in the phone's small font from the left
+edge, bottom-aligned, so the last row is always a full one and the spare
+pixels sit at the top. On a 96x65 screen that is five rows of some twenty
 characters.
 
 ## Keypad
@@ -18,7 +18,16 @@ characters.
 | green call key | send Enter (writable panes) |
 
 The same list is printed at the bottom of Settings. The left soft key menu
-still offers Reply, Keys, Refresh, Auto, Back and Settings.
+still offers Reply, Keys, Refresh, Auto, Pane, Back and Settings.
+
+## Pane
+
+`Pane` in the menu opens the pane's own view, kept per pane address, as
+a list: **Auto** (every [lens](lenses.md) may recognise the program),
+**Plain** (the rows as they are) and one entry per lens, today **Claude
+Code**, which uses that lens whether or not it is sure of the screen.
+Selecting one saves it and redraws. The app remembers the last 32 panes
+that were given a view; the others are Auto.
 
 ```mermaid
 stateDiagram-v2
@@ -43,10 +52,18 @@ bar runs in the top right corner, overlay or not.
 ## Wrapping
 
 The app asks the hub for the pane's rows as they are on the terminal
-(`width=400`, the protocol's maximum) and wraps them itself at the columns
-the screen fits. Rows longer than that are cut into pieces; nothing scrolls
-sideways. The `Width` setting still means what it did: `0` fits the screen,
-any other value wraps at that many columns.
+(`width=400`, the protocol's maximum) and wraps them itself. Rows longer
+than the screen are cut into pieces; nothing scrolls sideways. The `Width`
+setting still means what it did: any value other than `0` wraps at that
+many characters.
+
+With `Width` at `0` the app wraps by measured pixels, character by
+character. Nokia phones have no monospace font: asking for one gives the
+proportional system font, whose letters are mostly narrower than `M`, so
+counting columns by `M` left three or four characters of room at the end
+of every row. The app measures each character once and cuts a row where
+the next one would not fit. The lens sees the rows before wrapping either
+way.
 
 Wrapping on the phone is what lets a lens see a whole row: a rule of eighty
 `─`, or a status line pushed to the right edge, is not recognisable once
@@ -60,7 +77,7 @@ flowchart TD
     L -- yes --> C[lens.shape]
     C --> B
     C --> P[pinned rows]
-    B --> W[wrap at the screen's columns]
+    B --> W[wrap: at Width characters, or by measured pixels]
     P --> W
     W --> D[paint: pinned rows at the bottom, body above, bottom-aligned]
 ```
@@ -71,5 +88,8 @@ The view changes how rows are drawn and adds keypad routes to screens that
 exist already. `5` and `0` do nothing on a pane the token cannot write;
 the hub refuses a write anyway if a relay lied about that. No key sends
 anything but Enter. Wrapping allocates one string per wrapped row, at most
-32 KiB / 8 columns of them, within the smallest target's heap. The pane's
-content is traced only in test builds, as before.
+32 KiB / 8 columns of them (by pixels, one character per row at the
+worst), within the smallest target's heap. The pane records in the
+settings store hold only addresses the hub listed, at most 32, and a line
+that does not parse is dropped on read. The pane's content is traced only
+in test builds, as before.

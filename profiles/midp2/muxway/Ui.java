@@ -7,6 +7,9 @@ final class Ui {
     // enough for the phone's heap and a slow link.
     static final int LINES = 120;
 
+    // Unicode from the hub; these phones can show it.
+    static final int TEXT = 0;
+
     private Ui() {
     }
 }
