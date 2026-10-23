@@ -267,3 +267,6 @@ F10 on the small screen failing because the emulator's menu landed on
 Keys instead of Auto (the known menu quirk, untouched code; green alone
 and in the next full run). Recorded run at commit `0fe89a2`:
 [test-run issue #2](https://github.com/notmarkopadjen/muxway-midp/issues/2).
+
+With Shift-Tab (F16) at commit `ef1b3b4`: 60 tests, green on both builds,
+[test-run issue #3](https://github.com/notmarkopadjen/muxway-midp/issues/3).
