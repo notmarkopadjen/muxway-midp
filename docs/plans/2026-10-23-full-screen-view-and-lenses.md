@@ -259,6 +259,9 @@ Deviations:
 
 58 tests: 27 unit, 15 end-to-end on each build (MIDP 1.0 on a 96x65
 screen, MIDP 2.0 on the default one), and the final search of every log
-for tokens and keys. All passing in three consecutive full runs on
-2026-10-23, 108 screenshots and an HTML report per run; the MIDP 1.0 JAR
-is 23.6 KiB. The run at this commit is recorded as its `test-run` issue.
+for tokens and keys; 108 screenshots and an HTML report per run; the MIDP
+1.0 JAR is 23.6 KiB. Five full runs on 2026-10-23: four green, one with
+F10 on the small screen failing because the emulator's menu landed on
+Keys instead of Auto (the known menu quirk, untouched code; green alone
+and in the next full run). Recorded run at commit `0fe89a2`:
+[test-run issue #2](https://github.com/notmarkopadjen/muxway-midp/issues/2).
