@@ -4,7 +4,7 @@
 
 Java ME client for [muxway](https://github.com/notmarkopadjen/muxway): tmux panes on a MIDP 1.0 or 2.0 phone.
 
-> Early development: the build works, the screens are next.
+> Early development: panes list, pane view, reply and keys work; tests are next.
 
 ## Build
 

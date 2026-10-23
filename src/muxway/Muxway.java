@@ -1,28 +1,72 @@
 package muxway;
 
+import java.io.IOException;
+import java.util.Vector;
+import javax.microedition.lcdui.Alert;
+import javax.microedition.lcdui.AlertType;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
+import javax.microedition.lcdui.Image;
+import javax.microedition.lcdui.ImageItem;
+import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.StringItem;
+import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
 import javax.microedition.midlet.MIDlet;
 
-/** muxway for Java ME phones. */
-public final class Muxway extends MIDlet implements CommandListener {
-    private final Prefs prefs = new Prefs(Ui.WIDTH);
+/** muxway for Java ME phones: pick a pane, read it, reply, send a key. */
+public final class Muxway extends MIDlet implements CommandListener, Runnable {
+    private static final int LIST = 1, OPEN = 2, REFRESH = 3, POLL = 4, SEND = 5, TYPE = 6, KEY = 7;
+
+    // Labels on the phone, names in the protocol.
+    private static final String[][] KEYS = {
+        {"Enter", "Enter"}, {"Ctrl-C", "C-c"}, {"Escape", "Escape"}, {"Tab", "Tab"},
+        {"Up", "Up"}, {"Down", "Down"}, {"Left", "Left"}, {"Right", "Right"},
+        {"Page up", "PageUp"}, {"Page down", "PageDown"}, {"Backspace", "BSpace"},
+        {"Ctrl-D", "C-d"}, {"Ctrl-L", "C-l"},
+    };
+
+    private final Prefs prefs = new Prefs();
+    private Api api;
     private Display display;
 
     private final Form setup = new Form("Settings");
     private final TextField server = new TextField("Server", "", 120, TextField.URL);
     private final TextField token = new TextField("Token", "", 64, TextField.PASSWORD);
-    private final TextField width = new TextField("Width", "", 3, TextField.NUMERIC);
+    private final TextField width = new TextField("Width, 0 = fit", "", 3, TextField.NUMERIC);
     private final TextField refresh = new TextField("Auto refresh, s", "", 3, TextField.NUMERIC);
-    private final Form home = new Form("muxway");
+
+    private final List panes = new List("muxway", List.IMPLICIT);
+    private final Vector addresses = new Vector();
+    private final Vector writable = new Vector();
+    private PaneView view;
+    private final TextBox reply = new TextBox("Reply", "", 500, TextField.ANY);
+    private final List keys = new List("Keys", List.IMPLICIT);
+
+    private final Form wait = new Form("muxway");
+    private final StringItem waitNote = new StringItem(null, "");
+    private final ImageItem waitBar = new ImageItem(null, null, ImageItem.LAYOUT_CENTER, "");
+    private Image[] frames;
+
     private final Command ok = new Command("OK", Command.OK, 1);
-    private final Command settings = new Command("Settings", Command.SCREEN, 5);
+    private final Command send = new Command("Send", Command.OK, 1);
+    private final Command type = new Command("Type", Command.SCREEN, 2);
+    private final Command replyCmd = new Command("Reply", Command.SCREEN, 1);
+    private final Command keysCmd = new Command("Keys", Command.SCREEN, 2);
+    private final Command refreshCmd = new Command("Refresh", Command.SCREEN, 3);
+    private final Command autoCmd = new Command("Auto", Command.SCREEN, 4);
+    private final Command back = new Command("Back", Command.BACK, 2);
+    private final Command settings = new Command("Settings", Command.SCREEN, 6);
     private final Command exit = new Command("Exit", Command.EXIT, 9);
+
+    private int job;
+    private String arg;
+    private boolean busy;
+    private boolean auto;
+    private int pollSerial;
 
     public Muxway() {
         setup.append(server);
@@ -32,9 +76,26 @@ public final class Muxway extends MIDlet implements CommandListener {
         setup.addCommand(ok);
         setup.addCommand(exit);
         setup.setCommandListener(this);
-        home.addCommand(settings);
-        home.addCommand(exit);
-        home.setCommandListener(this);
+
+        panes.addCommand(refreshCmd);
+        panes.addCommand(settings);
+        panes.addCommand(exit);
+        panes.setCommandListener(this);
+
+        reply.addCommand(send);
+        reply.addCommand(type);
+        reply.addCommand(back);
+        reply.setCommandListener(this);
+
+        for (int i = 0; i < KEYS.length; i++) {
+            keys.append(KEYS[i][0], null);
+        }
+        keys.addCommand(back);
+        keys.setCommandListener(this);
+
+        frames = loadFrames();
+        wait.append(waitNote);
+        wait.append(waitBar);
     }
 
     protected void startApp() {
@@ -42,19 +103,21 @@ public final class Muxway extends MIDlet implements CommandListener {
             return;
         }
         display = Display.getDisplay(this);
+        Trace.on = "1".equals(getAppProperty("Muxway-Trace"));
+        String version = getAppProperty("MIDlet-Version");
+        api = new Api(prefs, "muxway-midp/" + (version == null ? "?" : version) + " " + Ui.PROFILE);
         prefs.load();
         if (!prefs.ready()) {
-            // Installed from a JAD that carries the settings.
             String s = getAppProperty("Muxway-Server");
             String t = getAppProperty("Muxway-Token");
-            if (s != null && t != null && s.length() > 0 && t.length() > 0) {
+            if (s != null && t != null && s.trim().length() > 0 && t.trim().length() > 0) {
                 prefs.server = s.trim();
                 prefs.token = t.trim();
                 prefs.save();
             }
         }
         if (prefs.ready()) {
-            showHome();
+            start(LIST, null);
         } else {
             showSetup();
         }
@@ -64,42 +127,347 @@ public final class Muxway extends MIDlet implements CommandListener {
     }
 
     protected void destroyApp(boolean unconditional) {
+        auto = false;
     }
 
     public void commandAction(Command c, Displayable d) {
         if (c == exit) {
+            auto = false;
             notifyDestroyed();
         } else if (c == settings) {
+            auto = false;
             showSetup();
         } else if (d == setup && c == ok) {
-            prefs.server = server.getString().trim();
-            String t = token.getString().trim();
-            if (t.length() > 0) {
-                prefs.token = t;
+            saveSetup();
+        } else if (d == panes && c == List.SELECT_COMMAND) {
+            int i = panes.getSelectedIndex();
+            if (i >= 0 && i < addresses.size()) {
+                open(i);
             }
-            prefs.width = Math.max(8, Math.min(400, Text.toInt(width.getString(), Ui.WIDTH)));
-            prefs.refresh = Math.max(0, Math.min(600, Text.toInt(refresh.getString(), 0)));
-            prefs.save();
-            if (prefs.ready()) {
-                showHome();
+        } else if (d == panes && c == refreshCmd) {
+            start(LIST, null);
+        } else if (d == view && c == back) {
+            auto = false;
+            start(LIST, null);
+        } else if (d == view && c == refreshCmd) {
+            start(REFRESH, null);
+        } else if (d == view && c == autoCmd) {
+            auto = !auto;
+            alert(auto ? "Auto refresh every " + interval() + " s." : "Auto refresh off.", view);
+            if (auto) {
+                poll();
             }
+        } else if (c == replyCmd) {
+            reply.setString("");
+            display.setCurrent(reply);
+        } else if (c == keysCmd) {
+            display.setCurrent(keys);
+        } else if (d == reply && (c == send || c == type)) {
+            String text = Text.printable(reply.getString());
+            if (text.length() > 0) {
+                start(c == send ? SEND : TYPE, text);
+            } else if (c == send) {
+                start(KEY, "Enter");
+            } else {
+                display.setCurrent(view);
+            }
+        } else if (d == keys && c == List.SELECT_COMMAND) {
+            start(KEY, KEYS[keys.getSelectedIndex()][1]);
+        } else if (c == back) {
+            display.setCurrent(view);
         }
+    }
+
+    private void saveSetup() {
+        prefs.server = trimSlash(server.getString().trim());
+        String t = token.getString().trim();
+        if (t.length() > 0) {
+            prefs.token = t;
+        }
+        prefs.width = Math.max(0, Math.min(400, Text.toInt(width.getString(), 0)));
+        prefs.refresh = Math.max(0, Math.min(600, Text.toInt(refresh.getString(), 0)));
+        prefs.save();
+        if (prefs.ready()) {
+            start(LIST, null);
+        } else {
+            alert("Server and token are needed.", setup);
+        }
+    }
+
+    private static String trimSlash(String s) {
+        while (s.endsWith("/")) {
+            s = s.substring(0, s.length() - 1);
+        }
+        return s;
     }
 
     private void showSetup() {
         server.setString(prefs.server);
-        // The stored token is never shown again; an empty field keeps it.
+        // The stored token is never shown again; leaving the field empty keeps it.
         token.setString("");
         width.setString(Integer.toString(prefs.width));
         refresh.setString(Integer.toString(prefs.refresh));
+        Trace.show("Settings: " + prefs.server);
         display.setCurrent(setup);
     }
 
-    private void showHome() {
-        for (int i = home.size() - 1; i >= 0; i--) {
-            home.delete(i);
+    private void open(int i) {
+        String address = (String) addresses.elementAt(i);
+        boolean canWrite = ((Boolean) writable.elementAt(i)).booleanValue();
+        view = new PaneView(frames);
+        view.address = address;
+        view.title = address.substring(address.indexOf('/') + 1);
+        view.writable = canWrite;
+        if (canWrite) {
+            view.addCommand(replyCmd);
+            view.addCommand(keysCmd);
         }
-        home.append(new StringItem(null, "Server: " + prefs.server + "\nPanes come next."));
-        display.setCurrent(home);
+        view.addCommand(refreshCmd);
+        view.addCommand(autoCmd);
+        view.addCommand(back);
+        view.addCommand(settings);
+        view.addCommand(exit);
+        view.setCommandListener(this);
+        auto = false;
+        display.setCurrent(view);
+        start(OPEN, null);
+    }
+
+    private int interval() {
+        return prefs.refresh > 0 ? prefs.refresh : 10;
+    }
+
+    /** Runs one job on its own thread; the UI thread must not touch the network. */
+    private synchronized boolean start(int what, String with) {
+        if (busy) {
+            return false;
+        }
+        busy = true;
+        job = what;
+        arg = with;
+        if (what == LIST) {
+            waitNote.setText("Loading panes...");
+            display.setCurrent(wait);
+        }
+        spin(what);
+        new Thread(this).start();
+        return true;
+    }
+
+    private void spin(final int what) {
+        new Thread() {
+            public void run() {
+                int step = 0;
+                while (busy) {
+                    if (what == LIST && frames != null) {
+                        waitBar.setImage(frames[step % frames.length]);
+                    } else if (what != LIST && what != POLL && view != null) {
+                        view.busy(step);
+                    }
+                    step++;
+                    try {
+                        Thread.sleep(150);
+                    } catch (InterruptedException e) {
+                    }
+                }
+                if (view != null) {
+                    view.busy(-1);
+                }
+            }
+        }.start();
+    }
+
+    public void run() {
+        try {
+            switch (job) {
+            case LIST:
+                list();
+                break;
+            case OPEN:
+                for (int i = 0; i < 20 && view.columns() == 0; i++) {
+                    Thread.sleep(50);
+                }
+                read(null);
+                break;
+            case REFRESH:
+                read(null);
+                break;
+            case POLL:
+                read(view.address.equals(arg) ? etag : null);
+                break;
+            case SEND:
+            case TYPE:
+                if (input(Api.text(arg)) && (job == TYPE || input(Api.key("Enter")))) {
+                    display.setCurrent(view);
+                    Thread.sleep(500);
+                    read(null);
+                }
+                break;
+            case KEY:
+                if (input(Api.key(arg))) {
+                    display.setCurrent(view);
+                    Thread.sleep(300);
+                    read(null);
+                }
+                break;
+            }
+        } catch (IOException e) {
+            fail("No connection: " + e.getMessage());
+        } catch (Exception e) {
+            fail(e.toString());
+        } finally {
+            busy = false;
+        }
+    }
+
+    private String etag = "";
+
+    private void list() throws IOException {
+        if (api.call("panes", null, null) != 200) {
+            problem(api.status);
+            return;
+        }
+        String[] rows = Text.split(api.body, '\n');
+        for (int i = panes.size() - 1; i >= 0; i--) {
+            panes.delete(i);
+        }
+        addresses.removeAllElements();
+        writable.removeAllElements();
+        StringBuffer shown = new StringBuffer();
+        for (int i = 0; i < rows.length; i++) {
+            String[] f = Text.split(rows[i], '\t');
+            if (f.length < 3) {
+                continue;
+            }
+            boolean w = f[1].equals("write");
+            String label = (w ? "* " : "  ") + f[0] + " " + f[2];
+            panes.append(label, null);
+            addresses.addElement(f[0]);
+            writable.addElement(new Boolean(w));
+            shown.append(label).append('\n');
+        }
+        if (api.call("hosts", null, null) == 200) {
+            String[] hosts = Text.split(api.body, '\n');
+            for (int i = 0; i < hosts.length; i++) {
+                String[] f = Text.split(hosts[i], '\t');
+                if (f.length == 2 && f[1].equals("offline")) {
+                    String label = "- " + f[0] + " offline";
+                    panes.append(label, null);
+                    shown.append(label).append('\n');
+                }
+            }
+        }
+        if (panes.size() == 0) {
+            panes.append("No panes. Expose one on a host.", null);
+        }
+        Trace.show("Panes: " + shown.toString());
+        display.setCurrent(panes);
+    }
+
+    private void read(String ifNoneMatch) throws IOException {
+        if (view == null) {
+            return;
+        }
+        int cols = prefs.width > 0 ? prefs.width : view.columns();
+        if (cols == 0) {
+            cols = 15;
+        }
+        String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=" + cols;
+        int status = api.call(path, null, ifNoneMatch);
+        if (status == 304) {
+            return;
+        }
+        if (status != 200) {
+            problem(status);
+            return;
+        }
+        etag = api.etag;
+        view.setText(api.body);
+    }
+
+    private boolean input(String json) throws IOException {
+        int status = api.call("panes/" + view.address + "/input", json, null);
+        if (status == 204) {
+            return true;
+        }
+        problem(status);
+        return false;
+    }
+
+    /** Re-reads the open pane every interval while Auto is on and it is shown. */
+    private void poll() {
+        final int serial = ++pollSerial;
+        final PaneView polled = view;
+        new Thread() {
+            public void run() {
+                while (auto && serial == pollSerial && view == polled) {
+                    try {
+                        Thread.sleep(interval() * 1000L);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                    if (auto && serial == pollSerial && view == polled && display.getCurrent() == polled) {
+                        Muxway.this.start(POLL, polled.address);
+                    }
+                }
+            }
+        }.start();
+    }
+
+    private void problem(int status) {
+        if (status == 401) {
+            auto = false;
+            prefs.token = "";
+            prefs.save();
+            alert(Api.problem(status) + " Enter a new one.", setup);
+            showSetupLater();
+            return;
+        }
+        Displayable next = view != null && display.getCurrent() != panes && job != LIST ? (Displayable) view : panes;
+        if (job == LIST && panes.size() == 0) {
+            next = setup;
+        }
+        alert(Api.problem(status), next);
+    }
+
+    private void showSetupLater() {
+        server.setString(prefs.server);
+        token.setString("");
+        width.setString(Integer.toString(prefs.width));
+        refresh.setString(Integer.toString(prefs.refresh));
+    }
+
+    private void fail(String message) {
+        Displayable next = job == LIST ? (Displayable) setup : view;
+        if (next == null) {
+            next = setup;
+        }
+        if (next == setup) {
+            showSetupLater();
+        }
+        alert(message, next);
+    }
+
+    private void alert(String text, Displayable next) {
+        Trace.show("Alert: " + text);
+        Alert a = new Alert("muxway", text, null, AlertType.INFO);
+        a.setTimeout(Alert.FOREVER);
+        display.setCurrent(a, next);
+    }
+
+    private static Image[] loadFrames() {
+        Vector found = new Vector();
+        try {
+            for (int i = 0; ; i++) {
+                found.addElement(Image.createImage("/wait" + i + ".png"));
+            }
+        } catch (Exception e) {
+        }
+        if (found.size() == 0) {
+            return null;
+        }
+        Image[] out = new Image[found.size()];
+        found.copyInto(out);
+        return out;
     }
 }

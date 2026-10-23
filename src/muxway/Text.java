@@ -33,6 +33,18 @@ final class Text {
         }
     }
 
+    /** Keeps printable characters, newlines and tabs (list columns). */
+    static String screen(String s) {
+        StringBuffer out = new StringBuffer(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7f && (c < 0x80 || c > 0x9f))) {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
     /** Drops control characters (C0, DEL, C1); the hub refuses them in input. */
     static String printable(String s) {
         StringBuffer out = new StringBuffer(s.length());

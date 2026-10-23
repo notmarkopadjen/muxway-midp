@@ -11,10 +11,6 @@ final class Prefs {
     int width;
     int refresh;
 
-    Prefs(int defaultWidth) {
-        width = defaultWidth;
-    }
-
     boolean ready() {
         return server.length() > 0 && token.length() > 0;
     }
