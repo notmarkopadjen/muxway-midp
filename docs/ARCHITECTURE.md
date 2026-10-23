@@ -24,7 +24,8 @@ HTTPS. See [the relay page](features/relay.md).
 | Path | What |
 |---|---|
 | `src/muxway/Muxway.java` | the MIDlet: screens, commands, jobs, auto refresh |
-| `src/muxway/PaneView.java` | the pane, drawn on a Canvas |
+| `src/muxway/PaneView.java` | the pane, drawn on a Canvas over the whole screen |
+| `src/muxway/Lens.java`, `src/muxway/ClaudeCode.java` | lenses: per-program reshaping of a pane's rows ([lenses](features/lenses.md)) |
 | `src/muxway/Api.java` | the four protocol calls, limits, error messages |
 | `src/muxway/Prefs.java` | settings in the record store |
 | `src/muxway/Text.java` | string helpers CLDC 1.0 lacks, filters for screen and input |
@@ -55,12 +56,15 @@ stateDiagram-v2
   follow with `-`.
 - **Pane** is a `Canvas`, not a `Form`: a MIDP 1.0 form opens at its top
   and cannot be scrolled from code, while a terminal must open at its
-  bottom. The canvas draws an inverted title bar and the lines in a
-  monospace font, measures how many columns fit (from the first full
+  bottom. The canvas fills the whole screen with the rows in a monospace
+  font, bottom-aligned, measures how many columns fit (from the first full
   paint's clip, because `Canvas.getWidth` binds to `Displayable` in the
-  MIDP 2.0 stubs and that method does not exist there on MIDP 1.0), and
-  asks the hub to wrap to that width. Up and Down scroll; the green call key
-  of Nokia phones sends Enter.
+  MIDP 2.0 stubs and that method does not exist there on MIDP 1.0), asks
+  the hub for the rows unwrapped (`width=400`) and wraps them itself. A
+  lens may pin rows to the bottom. `2`/`8` scroll, `5` and `0` open Reply
+  and Keys, `#` overlays title and position, `*` reveals what a lens hid,
+  the green call key of Nokia phones sends Enter. See
+  [the pane view](features/pane-view.md).
 - **Reply** is a `TextBox`; control characters are removed before sending.
 - **Keys** lists the protocol's named keys in plain words.
 - **Settings** keeps the token in a password field and never shows it
@@ -82,7 +86,7 @@ sequenceDiagram
     S-->>J: 204 (or 200 ok through a relay)
     J->>S: POST input {"key": "Enter"}
     S-->>J: 204
-    J->>S: GET pane (text, width)
+    J->>S: GET pane (text, width=400)
     S-->>J: 200 lines
     J->>M: show lines
     W-->>M: nothing to do (job finished)

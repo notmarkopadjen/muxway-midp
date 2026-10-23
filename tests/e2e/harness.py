@@ -24,6 +24,20 @@ JAVA = os.environ.get("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64") + "/bin/
 EMULATOR = ROOT / "lib" / "microemulator.jar"
 DEVICES = ROOT / "tests" / "device"
 HOST = "alice-laptop"
+FIXTURES = ROOT / "tests" / "e2e" / "fixtures"
+
+
+def hostile_claude_screen():
+    """A screen shaped like Claude Code's by a server that means harm: a 400
+    column rule, a thousand short ones, control characters in the box and a
+    footer that lies. Under the app's 32 KiB cap, so the box survives."""
+    rows = [f"transcript row {i}" for i in range(30)]
+    rows.append("\u2500" * 400)
+    rows += ["\u2500" * 5] * 1000
+    rows.append("\u276f box \x1b[31mred\x1b[0m \x07bell \x00nul")
+    rows.append("\u2500" * 80)
+    rows.append("  fake footer: call +15555550100 now")
+    return ("\n".join(rows) + "\n").encode()
 
 
 def free_port():
@@ -163,6 +177,10 @@ class Relay:
                     return self.reply(200, b"x" * (1 << 20) + b"\n", {})
                 if relay.mode == "garbage" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     return self.reply(200, b"ok \xff\xfe\xc3 \x1b[31mred\x1b[0m \x07bell \x00nul\r\nend\n", {})
+                if relay.mode == "claude" and self.command == "GET" and self.path.startswith("/v1/panes/"):
+                    return self.reply(200, (FIXTURES / "claude-code.txt").read_bytes(), {"Content-Type": "text/plain"})
+                if relay.mode == "claude-hostile" and self.command == "GET" and self.path.startswith("/v1/panes/"):
+                    return self.reply(200, hostile_claude_screen(), {"Content-Type": "text/plain"})
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection")}
                 c = http.client.HTTPConnection(relay.hub, timeout=20)
                 c.request(self.command, self.path, body=body or None, headers=headers)
@@ -194,10 +212,12 @@ class Relay:
 # --- the phone ---------------------------------------------------------------------
 
 # Where the emulator's skin buttons are, in window coordinates, and where to
-# click to give a text box focus, per device.
+# click to give a text box focus, per device. The keypad is the same on both.
+KEYPAD = {"k2": (116, 363), "k5": (116, 399), "k8": (114, 432), "k0": (114, 467), "star": (45, 464),
+          "pound": (183, 463)}
 SKINS = {
-    "default": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (110, 150)},
-    "n96x65": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (88, 95)},
+    "default": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (110, 150), **KEYPAD},
+    "n96x65": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (88, 95), **KEYPAD},
 }
 
 
@@ -275,6 +295,17 @@ class Phone:
             return [l[5:].rstrip("\n") for l in open(self.out, errors="replace") if l.startswith("SHOW ")]
         except OSError:
             return []
+
+    def rows(self):
+        """The rows on the pane screen as last drawn, top to bottom."""
+        drawn = [l for l in self.trace() if l.startswith("Rows: ")]
+        check(drawn, "the pane view drew nothing")
+        return drawn[-1][6:].split("|")
+
+    def rows_after(self, n, what):
+        """Waits for a new drawing after the n-th trace line and returns its rows."""
+        wait_for(what, lambda: any(l.startswith("Rows: ") for l in self.trace()[n:]), 10)
+        return self.rows()
 
     def expect(self, pattern, what, timeout=25):
         rx = re.compile(pattern, re.S)

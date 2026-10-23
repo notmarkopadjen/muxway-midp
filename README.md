@@ -8,9 +8,14 @@ Java ME client for [muxway](https://github.com/notmarkopadjen/muxway): tmux pane
 
 Read panes and type into them from a phone with a 96x65 screen and GPRS. The
 app runs on MIDP 1.0 and 2.0 phones and talks to a muxway hub through a
-small relay, since phones of that age cannot do current HTTPS.
+small relay, since phones of that age cannot do current HTTPS. The pane
+fills the whole screen, the keypad does the common things, and a lens can
+reshape one program's screen for the phone: the first one is for Claude
+Code.
 
 - [Install](docs/features/install.md)
+- [The pane view and its keypad](docs/features/pane-view.md)
+- [Lenses, and the Claude Code lens](docs/features/lenses.md)
 - [Running a relay](docs/features/relay.md)
 - [Architecture](docs/ARCHITECTURE.md)
 

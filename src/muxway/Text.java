@@ -25,6 +25,28 @@ final class Text {
         return out;
     }
 
+    /** Cuts rows longer than cols into pieces of cols characters; cols of 0 leaves them. */
+    static String[] wrap(String[] rows, int cols) {
+        if (cols <= 0) {
+            return rows;
+        }
+        int n = 0;
+        for (int i = 0; i < rows.length; i++) {
+            n += Math.max(1, (rows[i].length() + cols - 1) / cols);
+        }
+        String[] out = new String[n];
+        n = 0;
+        for (int i = 0; i < rows.length; i++) {
+            String r = rows[i];
+            while (r.length() > cols) {
+                out[n++] = r.substring(0, cols);
+                r = r.substring(cols);
+            }
+            out[n++] = r;
+        }
+        return out;
+    }
+
     static int toInt(String s, int fallback) {
         try {
             return Integer.parseInt(s.trim());

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Vector;
 import javax.microedition.lcdui.Alert;
 import javax.microedition.lcdui.AlertType;
+import javax.microedition.lcdui.ChoiceGroup;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Display;
@@ -29,6 +30,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         {"Ctrl-D", "C-d"}, {"Ctrl-L", "C-l"},
     };
 
+    // Every lens looks at a pane's rows; the first that recognises its program shapes them.
+    private static final Lens[] LENSES = {new ClaudeCode()};
+
     private final Prefs prefs = new Prefs();
     private Api api;
     private Display display;
@@ -38,6 +42,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final TextField token = new TextField("Token", "", 64, TextField.PASSWORD);
     private final TextField width = new TextField("Width, 0 = fit", "", 3, TextField.NUMERIC);
     private final TextField refresh = new TextField("Auto refresh, s", "", 3, TextField.NUMERIC);
+    private final ChoiceGroup viewChoice = new ChoiceGroup("View", ChoiceGroup.EXCLUSIVE,
+        new String[] {"Auto", "Plain"}, null);
+    private final StringItem help = new StringItem("Keys",
+        "2/8 scroll, 5 reply, 0 keys, # title and position, * hidden rows, call key Enter");
 
     private final List panes = new List("muxway", List.IMPLICIT);
     private final Vector addresses = new Vector();
@@ -76,6 +84,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         setup.append(token);
         setup.append(width);
         setup.append(refresh);
+        setup.append(viewChoice);
+        setup.append(help);
         setup.addCommand(ok);
         setup.addCommand(exit);
         setup.setCommandListener(this);
@@ -120,6 +130,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 if (r != null) {
                     prefs.refresh = Math.max(0, Math.min(600, Text.toInt(r, 0)));
                 }
+                prefs.view = "plain".equals(getAppProperty("Muxway-View")) ? 1 : 0;
                 prefs.save();
             }
         }
@@ -165,10 +176,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 poll();
             }
         } else if (c == replyCmd) {
-            reply.setString("");
-            display.setCurrent(reply);
+            shortcut(PaneView.REPLY);
         } else if (c == keysCmd) {
-            display.setCurrent(keys);
+            shortcut(PaneView.KEYS);
         } else if (d == reply && (c == send || c == type)) {
             String text = Text.printable(reply.getString());
             if (text.length() > 0) {
@@ -185,6 +195,20 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
     }
 
+    /** Keypad shortcuts of the pane view and the commands that do the same. */
+    void shortcut(int what) {
+        if (what == PaneView.ENTER) {
+            start(KEY, "Enter");
+        } else if (what == PaneView.REPLY) {
+            reply.setString("");
+            Trace.show("Reply");
+            display.setCurrent(reply);
+        } else if (what == PaneView.KEYS) {
+            Trace.show("Keys");
+            display.setCurrent(keys);
+        }
+    }
+
     private void saveSetup() {
         prefs.server = trimSlash(server.getString().trim());
         String t = token.getString().trim();
@@ -193,6 +217,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         prefs.width = Math.max(0, Math.min(400, Text.toInt(width.getString(), 0)));
         prefs.refresh = Math.max(0, Math.min(600, Text.toInt(refresh.getString(), 0)));
+        prefs.view = viewChoice.getSelectedIndex();
         prefs.save();
         if (prefs.ready()) {
             start(LIST, null);
@@ -209,26 +234,31 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     }
 
     private void showSetup() {
+        fillSetup();
+        Trace.show("Settings: " + prefs.server);
+        display.setCurrent(setup);
+    }
+
+    private void fillSetup() {
         server.setString(prefs.server);
         // The stored token is never shown again; leaving the field empty keeps it.
         token.setString("");
         width.setString(Integer.toString(prefs.width));
         refresh.setString(Integer.toString(prefs.refresh));
-        Trace.show("Settings: " + prefs.server);
-        display.setCurrent(setup);
+        viewChoice.setSelectedIndex(prefs.view == 1 ? 1 : 0, true);
     }
 
     private void open(int i) {
         String address = (String) addresses.elementAt(i);
         boolean canWrite = ((Boolean) writable.elementAt(i)).booleanValue();
-        view = new PaneView(frames, new Runnable() {
-            public void run() {
-                start(KEY, "Enter");
-            }
-        });
+        view = new PaneView(frames, this);
         view.address = address;
         view.title = address.substring(address.indexOf('/') + 1);
         view.writable = canWrite;
+        view.cols = prefs.width;
+        if (prefs.view == 0) {
+            view.lenses = LENSES;
+        }
         if (canWrite) {
             view.addCommand(replyCmd);
             view.addCommand(keysCmd);
@@ -424,11 +454,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         if (view == null) {
             return;
         }
-        int cols = prefs.width > 0 ? prefs.width : view.columns();
-        if (cols == 0) {
-            cols = 15;
-        }
-        String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=" + cols;
+        // The rows as they are on the terminal; the phone wraps them itself.
+        String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=400";
         int status = api.call(path, null, ifNoneMatch);
         if (status == 304) {
             return;
@@ -477,7 +504,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             prefs.token = "";
             prefs.save();
             alert(Api.problem(status) + " Enter a new one.", setup);
-            showSetupLater();
+            fillSetup();
             return;
         }
         Displayable next = view != null && display.getCurrent() != panes && job != LIST ? (Displayable) view : panes;
@@ -487,20 +514,13 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         alert(Api.problem(status), next);
     }
 
-    private void showSetupLater() {
-        server.setString(prefs.server);
-        token.setString("");
-        width.setString(Integer.toString(prefs.width));
-        refresh.setString(Integer.toString(prefs.refresh));
-    }
-
     private void fail(String message) {
         Displayable next = job == LIST ? (Displayable) setup : view;
         if (next == null) {
             next = setup;
         }
         if (next == setup) {
-            showSetupLater();
+            fillSetup();
         }
         alert(message, next);
     }

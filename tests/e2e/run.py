@@ -175,16 +175,56 @@ def s05(run, name, profile):
     check("Exception" not in open(phone.out, errors="replace").read(), "the app threw")
 
 
+@test("S06", "Hostile Claude-like screen: 400-column and a thousand rules, control characters, a lying footer",
+      "e2e-security")
+def s06(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="claude-hostile")
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: transcript row 0", "content")
+    rows = phone.rows_after(0, "drawn")
+    # The relay skips the hub, so the escape sequences lose only their ESC here.
+    check(any(r.startswith("\u276f box ") for r in rows[-2:]), f"box not pinned: {rows[-2:]}")
+    check(not any("fake footer" in r for r in rows), "the footer was shown without asking")
+    check(not rows[-1].startswith("\u2500"), f"a rule on the last row: {rows[-1]}")
+    phone.shot("hostile")
+    n = len(phone.trace())
+    phone.click("star")
+    rows = phone.rows_after(n, "revealed")
+    check(any("fake footer" in r for r in rows), f"* did not reveal the footer: {rows}")
+    phone.shot("revealed")
+    check("Exception" not in open(phone.out, errors="replace").read(), "the app threw")
+
+
+@test("S07", "Read-only pane: keypad 5 and 0 open nothing and send nothing", "e2e-security")
+def s07(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, expose=None)
+    phone.expect(r"^Panes:   ", "list without a star")
+    phone.click("select")
+    phone.expect(r"^View .* read-only", "read-only view")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.click("k5")
+    phone.click("k0")
+    time.sleep(1)
+    phone.shot("after-5-and-0")
+    check(not any(l in ("Reply", "Keys") for l in phone.trace()), "Reply or Keys opened on a read-only pane")
+    check(not any(r["method"] == "POST" for r in relay.requests), "a key reached the relay")
+
+
 # --- features ----------------------------------------------------------------------
 
-@test("F07", "List, open, read at the phone's width", "e2e-ui")
+@test("F07", "List, open, read: unwrapped rows asked for, wrapped to the whole screen", "e2e-ui")
 def f07(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile)
     open_pane(phone)
     widths = [int(m.group(1)) for r in relay.requests for m in [re.search(r"[?&]width=(\d+)", r["path"])] if m]
-    check(widths, "the app never asked for a width")
-    lo, hi = (12, 20) if profile == "midp1" else (25, 40)
-    check(lo <= widths[0] <= hi, f"asked for width {widths[0]}, expected {lo} to {hi} on this screen")
+    check(widths and widths[0] == 400, f"asked for width {widths[:1]}, expected 400 (rows as they are)")
+    rows = phone.rows_after(0, "drawn")
+    cols = max(len(r) for r in rows)
+    lo, hi, rlo, rhi = (12, 20, 5, 7) if profile == "midp1" else (25, 40, 10, 24)
+    check(rlo <= len(rows) <= rhi, f"{len(rows)} rows on screen, expected {rlo} to {rhi}")
+    check(cols <= hi, f"a row of {cols} characters, more than fit")
+    check(rows[-1].startswith("$"), f"the prompt is not on the last row: {rows[-1]!r}")
     phone.expect(r"^View " + HOST + r"/work/0\.0 writable", "writable view")
 
 
@@ -251,6 +291,66 @@ def f11(run, name, profile):
     phone.shot("no-connection")
 
 
+@test("F14", "Claude Code lens: rules gone, footer hidden, the input box stays at the bottom while scrolling",
+      "e2e-ui")
+def f14(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="claude")
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: .*Claude Code", "content")
+    rows = phone.rows_after(0, "drawn")
+    box = [i for i, r in enumerate(rows) if r.startswith("\u276f fix the typo")]
+    check(box and box[0] >= len(rows) - 2, f"input box not at the bottom: {rows}")
+    check(not any("\u2500" in r for r in rows), f"a rule is shown: {rows}")
+    check(not any("shift+tab" in r or "/effort" in r for r in rows), f"footer or status shown: {rows}")
+    check(rows[box[0] - 1].strip(), f"blank row above the box: {rows}")
+    time.sleep(1)
+    phone.shot("claude")
+    n = len(phone.trace())
+    phone.click("k2")
+    phone.click("k2")
+    scrolled = phone.rows_after(n, "scrolled")
+    check(scrolled[:box[0]] != rows[:box[0]], "2 did not scroll")
+    check(scrolled[box[0]] == rows[box[0]], f"the box moved while scrolling: {scrolled}")
+    phone.shot("scrolled")
+    n = len(phone.trace())
+    phone.click("star")
+    revealed = phone.rows_after(n, "revealed")
+    check(any("shift+tab" in r for r in revealed), f"* did not reveal the footer: {revealed}")
+    phone.shot("revealed")
+    phone.click("pound")
+    phone.expect(r"^Info on", "overlay")
+    time.sleep(0.5)
+    phone.shot("info")
+
+
+@test("F15", "Keypad: 5 opens Reply, 0 opens Keys, 8 scrolls back", "e2e-ui")
+def f15(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile)
+    open_pane(phone)
+    phone.click("k5")
+    phone.expect(r"^Reply$", "reply by 5")
+    phone.type("seq 2 30")  # more rows than any screen, so there is something to scroll
+    phone.shot("reply-by-5")
+    phone.click("right")  # Send
+    wait_for("seq output", lambda: "29\n30" in core.pane())
+    phone.expect(r"^work/0\.0: .*29\|30", "refreshed pane shows the output")
+    phone.click("k0")
+    phone.expect(r"^Keys$", "keys by 0")
+    phone.shot("keys-by-0")
+    phone.click("select")  # Enter, the first key
+    time.sleep(2)
+    rows = phone.rows()
+    n = len(phone.trace())
+    phone.click("k2")
+    up = phone.rows_after(n, "scrolled up")
+    check(up != rows, "2 did not scroll")
+    n = len(phone.trace())
+    phone.click("k8")
+    down = phone.rows_after(n, "scrolled down")
+    check(down == rows, f"8 did not scroll back: {down}")
+
+
 @test("J13", "Without settings in the install file the app opens Settings", "e2e-ui")
 def j13(run, name, profile):
     phone = Phone(run, name, profile, {})
@@ -271,7 +371,8 @@ def unit_tests(run, results):
     start = time.time()
     comp = subprocess.run([javac, "-nowarn", "-cp", cp, "-d", str(build), str(root / "src/muxway/Text.java"),
                            str(root / "src/muxway/Api.java"), str(root / "src/muxway/Prefs.java"),
-                           str(root / "src/muxway/Trace.java"), str(root / "profiles/midp2/muxway/Ui.java"),
+                           str(root / "src/muxway/Trace.java"), str(root / "src/muxway/Lens.java"),
+                           str(root / "src/muxway/ClaudeCode.java"), str(root / "profiles/midp2/muxway/Ui.java"),
                            str(root / "tests/unit/UnitTest.java")], capture_output=True, text=True)
     out = comp.stdout + comp.stderr
     if comp.returncode == 0:

@@ -6,38 +6,49 @@ import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
 
 /**
- * One pane, drawn like a terminal: a title bar, then the pane's last lines in
- * a monospace font, opening at the bottom. Up and Down scroll. The size is
- * taken from the first full paint, because Canvas.getWidth binds to a class
- * MIDP 1.0 phones do not have it on.
+ * One pane, drawn like a terminal over the whole screen: its last rows in a
+ * monospace font, bottom-aligned, with the rows a lens pinned under them.
+ * Title and scroll position are an overlay shown on #. The size is taken
+ * from the first full paint, because Canvas.getWidth binds to a class MIDP
+ * 1.0 phones do not have it on.
  */
 final class PaneView extends Canvas {
+    static final int ENTER = 1, REPLY = 2, KEYS = 3;
+
     // The green call key on Nokia phones; it sends Enter.
     private static final int SEND_KEY = -10;
 
     private final Font font = Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL);
-    private final Font bold = Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_BOLD, Font.SIZE_SMALL);
     private final Image[] frames;
+    private final Muxway app;
 
     String title = "";
     String address = "";
     boolean writable;
-    private String[] lines = new String[0];
+    Lens[] lenses = new Lens[0];
+    // Wrap width in columns; 0 fits the screen.
+    int cols;
+
+    private String[] raw = new String[0];
+    private String[] body = new String[0];
+    private String[] pinned = new String[0];
+    private int wrapped;
     private int offset;
+    private boolean reveal;
+    private boolean info;
     private int width;
     private int height;
     private int frame = -1;
-    private final Runnable enter;
 
-    PaneView(Image[] frames, Runnable enter) {
+    PaneView(Image[] frames, Muxway app) {
         this.frames = frames;
-        this.enter = enter;
+        this.app = app;
     }
 
     /** Columns that fit, or 0 before the first paint. */
     int columns() {
         int w = font.charWidth('M');
-        return width > 0 && w > 0 ? Math.max(8, (width - 2) / w) : 0;
+        return width > 0 && w > 0 ? Math.max(8, width / w) : 0;
     }
 
     void setText(String text) {
@@ -46,16 +57,74 @@ final class PaneView extends Canvas {
         while (n > 0 && all[n - 1].length() == 0) {
             n--;
         }
-        lines = new String[n];
-        System.arraycopy(all, 0, lines, 0, n);
+        raw = new String[n];
+        System.arraycopy(all, 0, raw, 0, n);
         offset = 0;
         Trace.show(title + ": " + text);
+        shape();
+        show();
+    }
+
+    /** The waiting mark in the top right corner; -1 hides it. */
+    void busy(int step) {
+        frame = step;
         repaint();
     }
 
-    /** The waiting mark in the title bar; -1 hides it. */
-    void busy(int step) {
-        frame = step;
+    private int wrapAt() {
+        return cols > 0 ? cols : columns();
+    }
+
+    private void shape() {
+        String[][] shaped = null;
+        for (int i = 0; i < lenses.length && shaped == null; i++) {
+            shaped = lenses[i].shape(raw, reveal);
+        }
+        wrapped = wrapAt();
+        body = Text.wrap(shaped == null ? raw : shaped[0], wrapped);
+        pinned = Text.wrap(shaped == null ? new String[0] : shaped[1], wrapped);
+        offset = Math.min(offset, Math.max(0, body.length - bodyRows()));
+    }
+
+    private int rows() {
+        return Math.max(1, height / font.getHeight());
+    }
+
+    private int pinRows() {
+        return Math.min(pinned.length, rows() / 2);
+    }
+
+    private int bodyRows() {
+        return rows() - pinRows();
+    }
+
+    /** What is on screen, top to bottom: the body ends where the pinned rows start. */
+    private String[] visible() {
+        int n = rows(), pin = pinRows(), top = n - pin;
+        String[] out = new String[n];
+        int last = body.length - offset;
+        for (int i = 0; i < top; i++) {
+            int j = last - top + i;
+            out[i] = j >= 0 && j < body.length ? body[j] : "";
+        }
+        for (int i = 0; i < pin; i++) {
+            out[top + i] = pinned[pinned.length - pin + i];
+        }
+        return out;
+    }
+
+    private void show() {
+        if (Trace.on) {
+            String[] v = visible();
+            StringBuffer s = new StringBuffer("Rows: ");
+            for (int i = 0; i < v.length; i++) {
+                if (i > 0) {
+                    s.append('\n');
+                }
+                s.append(v[i]);
+            }
+            Trace.show(s.toString());
+        }
         repaint();
     }
 
@@ -64,62 +133,100 @@ final class PaneView extends Canvas {
             width = Math.max(width, g.getClipWidth());
             height = Math.max(height, g.getClipHeight());
         }
-        int w = width, h = height;
-        int lh = font.getHeight();
-        int bar = bold.getHeight() + 2;
+        if (wrapped != wrapAt()) {
+            shape();
+        }
+        int w = width, h = height, lh = font.getHeight(), n = rows();
+        int y0 = h - n * lh;
         g.setColor(0xffffff);
         g.fillRect(0, 0, w, h);
         g.setColor(0x000000);
-        g.fillRect(0, 0, w, bar);
-        g.setColor(0xffffff);
-        g.setFont(bold);
-        String head = (writable ? "> " : "  ") + title;
-        g.drawString(head, 1, 1, Graphics.TOP | Graphics.LEFT);
+        g.setFont(font);
+        String[] v = visible();
+        for (int i = 0; i < n; i++) {
+            g.drawString(v[i], 0, y0 + i * lh, Graphics.TOP | Graphics.LEFT);
+        }
+        if (info) {
+            bar(g, y0, (writable ? "> " : "  ") + title, null);
+            int last = body.length - offset;
+            int first = Math.max(0, last - bodyRows());
+            bar(g, y0 + (n - 1) * lh, (first + 1) + "-" + last + "/" + body.length, "2/8 5 0 # *");
+        }
         if (frame >= 0 && frames != null && frames.length > 0) {
-            Image f = frames[frame % frames.length];
-            g.drawImage(f, w - 1, bar / 2, Graphics.RIGHT | Graphics.VCENTER);
+            g.drawImage(frames[frame % frames.length], w, 0, Graphics.TOP | Graphics.RIGHT);
+        }
+    }
+
+    /** One inverted row of the overlay; the hint on the right only when both fit. */
+    private void bar(Graphics g, int y, String left, String right) {
+        g.setColor(0x000000);
+        g.fillRect(0, y, width, font.getHeight());
+        g.setColor(0xffffff);
+        g.drawString(left, 0, y, Graphics.TOP | Graphics.LEFT);
+        if (right != null && font.stringWidth(left + " " + right) <= width) {
+            g.drawString(right, width, y, Graphics.TOP | Graphics.RIGHT);
         }
         g.setColor(0x000000);
-        g.setFont(font);
-        int rows = Math.max(1, (h - bar - 1) / lh);
-        int last = lines.length - offset;
-        int first = Math.max(0, last - rows);
-        int y = bar + 1;
-        for (int i = first; i < last; i++) {
-            g.drawString(lines[i], 1, y, Graphics.TOP | Graphics.LEFT);
-            y += lh;
-        }
-        if (offset > 0) {
-            g.drawString("v", w - 1, h - 1, Graphics.BOTTOM | Graphics.RIGHT);
-        }
-        if (first > 0) {
-            g.drawString("^", w - 1, bar + 1, Graphics.TOP | Graphics.RIGHT);
-        }
     }
 
     protected void keyPressed(int key) {
-        if (key == SEND_KEY) {
+        switch (key) {
+        case KEY_NUM2:
+            scroll(1);
+            return;
+        case KEY_NUM8:
+            scroll(-1);
+            return;
+        case KEY_NUM5:
             if (writable) {
-                enter.run();
+                app.shortcut(REPLY);
+            }
+            return;
+        case KEY_NUM0:
+            if (writable) {
+                app.shortcut(KEYS);
+            }
+            return;
+        case KEY_POUND:
+            info = !info;
+            Trace.show("Info " + (info ? "on" : "off"));
+            repaint();
+            return;
+        case KEY_STAR:
+            reveal = !reveal;
+            shape();
+            show();
+            return;
+        case SEND_KEY:
+            if (writable) {
+                app.shortcut(ENTER);
             }
             return;
         }
-        scroll(getGameAction(key));
+        int action = getGameAction(key);
+        if (action == UP) {
+            scroll(1);
+        } else if (action == DOWN) {
+            scroll(-1);
+        }
     }
 
     protected void keyRepeated(int key) {
-        scroll(getGameAction(key));
+        if (key == KEY_NUM2 || key == KEY_NUM8) {
+            keyPressed(key);
+        } else {
+            int action = getGameAction(key);
+            if (action == UP || action == DOWN) {
+                keyPressed(key);
+            }
+        }
     }
 
-    private void scroll(int action) {
-        int rows = Math.max(1, (height - bold.getHeight() - 3) / font.getHeight());
-        if (action == UP) {
-            offset = Math.min(offset + 1, Math.max(0, lines.length - rows));
-        } else if (action == DOWN) {
-            offset = Math.max(0, offset - 1);
-        } else {
-            return;
+    private void scroll(int by) {
+        int next = Math.max(0, Math.min(offset + by, Math.max(0, body.length - bodyRows())));
+        if (next != offset) {
+            offset = next;
+            show();
         }
-        repaint();
     }
 }
