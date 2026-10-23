@@ -75,9 +75,10 @@ Without two rules the lens answers null: a plain shell, a pane Claude Code
 has left, or a version with a different layout look like the plain view.
 The lens therefore never hides a row of the transcript.
 
-Claude Code's own `Shift+Tab` cycles its permission mode. The protocol's
-key list has no Shift-Tab (`BTab`) yet; the Keys screen gains it once the
-hub accepts it.
+Claude Code's own `Shift+Tab` cycles its permission mode, which is what
+the hidden footer hints at. The Keys screen has it as `Shift-Tab`
+(protocol key `BTab`); a hub older than that key answers `400`, which the
+app reports as it does any refused input.
 
 ## Security
 

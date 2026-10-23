@@ -193,6 +193,7 @@ from the emulator against the test hub and the test relay only.
 | U16 | `Prefs` with a five-field record reads as Auto | unit | `view == 0` |
 | F14 | Claude Code view through the relay's `claude` mode, nothing set: no rules, no footer, `❯` row is the last row; `2` twice scrolls the transcript, `❯` row still last; `*` shows the footer; `#` shows title and position | e2e-ui | screenshots `claude`, `scrolled`, `revealed`, `info` |
 | F15 | Keypad: `5` opens Reply, text sent reaches the pane; `0` opens Keys; `8` scrolls back down | e2e-ui | screenshots `reply-by-5`, `keys-by-0` |
+| F16 | Keys: `Shift-Tab` reaches a pane running `cat` as `^[[Z` | e2e-ui | screenshots `shift-tab`, `typed` |
 | F07 | Updated: the request carries `width=400`, the trace reports the columns and rows the screen fits (12 to 20 x 5 to 7 on 96x65; 25 to 40 x 10 to 20 on the default) | e2e-ui | as stated |
 | 12 | Build check | build | MIDP 1.0 members only; `muxway1.jar` under 30 KiB |
 
@@ -228,9 +229,10 @@ do not change since the pane view gains no commands.
 - 2026-10-23: plan approved. The view is Auto by default: lenses recognise
   their program from the rows; Plain in Settings (or `Muxway-View: plain`)
   switches them off. Keypad layout as in section 2.
-- Open: Shift-Tab for Claude Code's mode cycling needs `BTab` in the core
-  protocol's key list (compatible v1 addition); the Keys list here gains
-  `Shift-Tab` once the core has it. Not part of this change.
+- 2026-10-23, later: Shift-Tab for Claude Code's mode cycling needed `BTab`
+  in the core protocol's key list; the owner had it added there (compatible
+  v1 addition, the core's plan `2026-10-23-shift-tab-key.md`) and the Keys
+  list here gained `Shift-Tab` the same day, with test F16.
 
 ---
 

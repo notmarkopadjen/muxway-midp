@@ -24,7 +24,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
     // Labels on the phone, names in the protocol.
     private static final String[][] KEYS = {
-        {"Enter", "Enter"}, {"Ctrl-C", "C-c"}, {"Escape", "Escape"}, {"Tab", "Tab"},
+        {"Enter", "Enter"}, {"Ctrl-C", "C-c"}, {"Escape", "Escape"}, {"Tab", "Tab"}, {"Shift-Tab", "BTab"},
         {"Up", "Up"}, {"Down", "Down"}, {"Left", "Left"}, {"Right", "Right"},
         {"Page up", "PageUp"}, {"Page down", "PageDown"}, {"Backspace", "BSpace"},
         {"Ctrl-D", "C-d"}, {"Ctrl-L", "C-l"},

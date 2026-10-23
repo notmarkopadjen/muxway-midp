@@ -351,6 +351,24 @@ def f15(run, name, profile):
     check(down == rows, f"8 did not scroll back: {down}")
 
 
+@test("F16", "Keys: Shift-Tab reaches the pane", "e2e-ui")
+def f16(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile)
+    # cat echoes what it gets, so Shift-Tab shows as ^[[Z; a shell would swallow it.
+    core.tmux_cmd("send-keys", "-t", "work:0.0", "-l", "cat")
+    core.tmux_cmd("send-keys", "-t", "work:0.0", "Enter")
+    wait_for("cat running", lambda: core.command() == "cat")
+    open_pane(phone)
+    phone.click("k0")
+    phone.expect(r"^Keys$", "keys by 0")
+    phone.key("Down", "Down", "Down", "Down")  # Enter, Ctrl-C, Escape, Tab, Shift-Tab
+    phone.shot("shift-tab")
+    phone.click("select")
+    wait_for("shift-tab typed", lambda: "^[[Z" in core.pane())
+    phone.expect(r"^work/0\.0: .*\^\[\[Z", "pane shows the escape")
+    phone.shot("typed")
+
+
 @test("J13", "Without settings in the install file the app opens Settings", "e2e-ui")
 def j13(run, name, profile):
     phone = Phone(run, name, profile, {})
