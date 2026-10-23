@@ -1,0 +1,8 @@
+MIDlet-Name: muxway
+MIDlet-Version: @VERSION@
+MIDlet-Vendor: muxway
+MIDlet-1: muxway, /icon.png, muxway.Muxway
+MIDlet-Description: Your tmux, from anywhere
+MIDlet-Info-URL: https://github.com/notmarkopadjen/muxway-midp
+MicroEdition-Configuration: CLDC-1.0
+MicroEdition-Profile: MIDP-1.0

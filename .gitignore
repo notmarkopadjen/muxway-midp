@@ -6,3 +6,6 @@
 *.key
 /test-runs/
 /tmp/
+lib/
+build/
+out/
