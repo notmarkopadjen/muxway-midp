@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Test device with a 96x65 display, for the MIDP 1.0 build. Adapted from the
+  default device of MicroEmulator 2.0.4 (LGPL 2.1 or Apache 2.0, at your
+  choice); only the display area differs. The skin images are loaded from
+  the emulator's own jar at test time and are not part of this repository.
+-->
 <device name="96x65"
 		xmlns="http://www.microemu.org/2.0.2/"
 		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
