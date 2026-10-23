@@ -48,11 +48,18 @@ final class Api {
             status = c.getResponseCode();
             String tag = c.getHeaderField("ETag");
             etag = tag == null ? "" : tag;
-            body = "";
-            if (status != HttpConnection.HTTP_NO_CONTENT && status != 304) {
+            // Read the answer even when it is empty: some phones release their
+            // one HTTP connection only after the response stream was opened.
+            byte[] raw = new byte[0];
+            try {
                 in = c.openInputStream();
-                body = Text.screen(decode(read(in)));
+                raw = read(in);
+            } catch (IOException e) {
+                if (status != HttpConnection.HTTP_NO_CONTENT && status != 304) {
+                    throw e;
+                }
             }
+            body = status == HttpConnection.HTTP_NO_CONTENT || status == 304 ? "" : Text.screen(decode(raw));
             return status;
         } finally {
             if (in != null) {

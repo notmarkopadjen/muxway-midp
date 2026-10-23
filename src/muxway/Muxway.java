@@ -62,9 +62,12 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Command settings = new Command("Settings", Command.SCREEN, 6);
     private final Command exit = new Command("Exit", Command.EXIT, 9);
 
+    private static final long TIMEOUT = 45000;
+
     private int job;
     private String arg;
     private boolean busy;
+    private int serial;
     private boolean auto;
     private int pollSerial;
 
@@ -214,7 +217,11 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private void open(int i) {
         String address = (String) addresses.elementAt(i);
         boolean canWrite = ((Boolean) writable.elementAt(i)).booleanValue();
-        view = new PaneView(frames);
+        view = new PaneView(frames, new Runnable() {
+            public void run() {
+                start(KEY, "Enter");
+            }
+        });
         view.address = address;
         view.title = address.substring(address.indexOf('/') + 1);
         view.writable = canWrite;
@@ -237,21 +244,57 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         return prefs.refresh > 0 ? prefs.refresh : 10;
     }
 
-    /** Runs one job on its own thread; the UI thread must not touch the network. */
+    /**
+     * Runs one job on its own thread; the UI thread must not touch the network.
+     * MIDP has no request timeout, so a watchdog gives up on a job that hangs
+     * and the app stays usable; a late answer from it is then ignored.
+     */
     private synchronized boolean start(int what, String with) {
         if (busy) {
+            if (what != POLL) {
+                alert("Still waiting for the last answer.", display.getCurrent());
+            }
             return false;
         }
         busy = true;
         job = what;
         arg = with;
+        final int mine = ++serial;
         if (what == LIST) {
             waitNote.setText("Loading panes...");
             display.setCurrent(wait);
         }
         spin(what);
         new Thread(this).start();
+        new Thread() {
+            public void run() {
+                try {
+                    Thread.sleep(TIMEOUT);
+                } catch (InterruptedException e) {
+                }
+                giveUp(mine);
+            }
+        }.start();
         return true;
+    }
+
+    private synchronized void giveUp(int which) {
+        if (busy && serial == which) {
+            busy = false;
+            serial++;
+            alert("No answer from the server.", job == LIST ? (Displayable) setup : view);
+        }
+    }
+
+    /** True while the job that is running is still the current one. */
+    private synchronized boolean current(int which) {
+        return serial == which;
+    }
+
+    private synchronized void finish(int which) {
+        if (serial == which) {
+            busy = false;
+        }
     }
 
     private void spin(final int what) {
@@ -278,6 +321,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     }
 
     public void run() {
+        int mine;
+        synchronized (this) {
+            mine = serial;
+        }
         try {
             switch (job) {
             case LIST:
@@ -312,11 +359,15 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 break;
             }
         } catch (IOException e) {
-            fail("No connection: " + e.getMessage());
+            if (current(mine)) {
+                fail("No connection: " + e.getMessage());
+            }
         } catch (Exception e) {
-            fail(e.toString());
+            if (current(mine)) {
+                fail(e.toString());
+            }
         } finally {
-            busy = false;
+            finish(mine);
         }
     }
 

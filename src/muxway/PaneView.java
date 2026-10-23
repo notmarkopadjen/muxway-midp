@@ -12,6 +12,9 @@ import javax.microedition.lcdui.Image;
  * MIDP 1.0 phones do not have it on.
  */
 final class PaneView extends Canvas {
+    // The green call key on Nokia phones; it sends Enter.
+    private static final int SEND_KEY = -10;
+
     private final Font font = Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL);
     private final Font bold = Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_BOLD, Font.SIZE_SMALL);
     private final Image[] frames;
@@ -24,9 +27,11 @@ final class PaneView extends Canvas {
     private int width;
     private int height;
     private int frame = -1;
+    private final Runnable enter;
 
-    PaneView(Image[] frames) {
+    PaneView(Image[] frames, Runnable enter) {
         this.frames = frames;
+        this.enter = enter;
     }
 
     /** Columns that fit, or 0 before the first paint. */
@@ -93,6 +98,12 @@ final class PaneView extends Canvas {
     }
 
     protected void keyPressed(int key) {
+        if (key == SEND_KEY) {
+            if (writable) {
+                enter.run();
+            }
+            return;
+        }
         scroll(getGameAction(key));
     }
 
