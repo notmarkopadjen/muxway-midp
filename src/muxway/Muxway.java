@@ -116,6 +116,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             if (s != null && t != null && s.trim().length() > 0 && t.trim().length() > 0) {
                 prefs.server = s.trim();
                 prefs.token = t.trim();
+                String r = getAppProperty("Muxway-Refresh");
+                if (r != null) {
+                    prefs.refresh = Math.max(0, Math.min(600, Text.toInt(r, 0)));
+                }
                 prefs.save();
             }
         }
@@ -236,6 +240,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view.addCommand(exit);
         view.setCommandListener(this);
         auto = false;
+        Trace.show("View " + address + (canWrite ? " writable" : " read-only"));
         display.setCurrent(view);
         start(OPEN, null);
     }

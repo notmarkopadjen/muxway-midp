@@ -1,6 +1,6 @@
 # Feature: the first Java ME client
 
-> Status: approved 2026-10-23.
+> Status: implemented 2026-10-23.
 
 ## 1. Goal
 
@@ -181,3 +181,40 @@ Both builds run every UI test, the 1.0 build on a 96x65 skin.
   token stays writable, client tests run locally only while the core
   repository is private, auto-refresh starts off.
 - 2026-10-23: the app authenticates with `X-Muxway-Token` only (spike above).
+
+## Review
+
+Done against the plan, the security rules and the privacy rules.
+
+Deviations:
+
+- **The pane view is a Canvas**, not a Form: a terminal has to open at its
+  bottom, and a MIDP 1.0 form can neither do that nor be measured. The
+  column count comes from the first full paint, because `Canvas.getWidth`
+  compiles to a MIDP 2.0-only method.
+- **The token travels in `X-Muxway-Token` only**, after the spike.
+- **Robustness found on the real phone**, now in the app: every response is
+  read before closing; a watchdog gives up on a request after 45 s; a
+  command during a request says so instead of being dropped; input
+  accepts `200` as well as `204`. The relay side of the same findings (no
+  JSON, no empty answers for WAP phones) is documented in the relay page.
+- **Found by the tests:** reading the body of an error answer throws on
+  some HTTP stacks, which the app had reported as "No connection"; the
+  status code now decides the message. CLDC 1.0 has no `Boolean.TRUE`.
+- Test 6 (control characters typed into Reply) is a Java SE unit test: an
+  emulator cannot type control characters, and the filter is a pure
+  function. Test 12 (the build check) runs in `scripts/e2e.sh` and writes
+  `build-check.txt`.
+
+Known limits: the emulator drops the second of two identical characters
+typed in a row, so test texts avoid doubled characters; and after a text
+box it may ignore the select key on a list, so one test restarts the phone
+instead of navigating back.
+
+## Test run
+
+33 tests: 10 unit, 11 end-to-end on each build (MIDP 1.0 on a 96x65
+screen, MIDP 2.0 on the default one), and the final search of every log
+for tokens and keys. All passing in two consecutive full runs; 78
+screenshots and an HTML report per run. CI skips the suite until it can
+read the core repository.

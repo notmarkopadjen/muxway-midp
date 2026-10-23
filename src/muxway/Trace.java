@@ -13,7 +13,12 @@ final class Trace {
 
     static void show(String s) {
         if (on) {
-            System.out.println("SHOW " + s);
+            StringBuffer line = new StringBuffer("SHOW ");
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                line.append(c == '\n' ? '|' : c);
+            }
+            System.out.println(line.toString());
         }
     }
 }

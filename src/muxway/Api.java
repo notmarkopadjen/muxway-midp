@@ -55,7 +55,9 @@ final class Api {
                 in = c.openInputStream();
                 raw = read(in);
             } catch (IOException e) {
-                if (status != HttpConnection.HTTP_NO_CONTENT && status != 304) {
+                // Some stacks throw here for an error status; the status alone
+                // says what happened then.
+                if (status == HttpConnection.HTTP_OK) {
                     throw e;
                 }
             }
