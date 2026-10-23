@@ -438,7 +438,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
     private boolean input(String json) throws IOException {
         int status = api.call("panes/" + view.address + "/input", json, null);
-        if (status == 204) {
+        // 204 from a hub; 200 from a relay that cannot pass an empty answer on.
+        if (status == 204 || status == 200) {
             return true;
         }
         problem(status);
