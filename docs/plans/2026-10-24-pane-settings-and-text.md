@@ -200,3 +200,8 @@ unit, 20 end-to-end on each build, the log search), recorded as
 the small screen because the emulator's menu landed on Keys instead of
 Pane, the known menu quirk; F17 passed alone twice and in this run. The
 MIDP 1.0 JAR is 25.9 KiB.
+
+0.3.1 (the decoder fix): run `20261024-002109-1684822` at commit `1684822`, passed, 103
+tests, recorded as [issue #5](https://github.com/notmarkopadjen/muxway-midp/issues/5). The run before it had the
+menu quirk once more (S08 on the small screen); the harness now lets the
+menu open before walking it.
