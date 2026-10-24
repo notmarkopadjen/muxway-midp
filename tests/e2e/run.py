@@ -183,12 +183,14 @@ def s08(run, name, profile):
     phone.expect(r"^Panes: ", "pane list")
     phone.click("select")
     phone.expect(r"^work/0\.0: .*Claude Code", "content")
-    for i in range(3):
+    for i in range(4):
         if i:
+            n = len(phone.trace())
             phone.menu(2)  # Refresh: the next lie
-            time.sleep(1.5)
-        rows = phone.rows_after(0, "drawn")
-        check(any(r.startswith("\u276f fix the typo") for r in rows), f"lie {i}: not decoded as UTF-8: {rows}")
+            rows = phone.rows_after(n, f"lie {i} drawn")
+        else:
+            rows = phone.rows_after(0, "drawn")
+        check(any(r.startswith(("\u276f fix the typo", "> fix the typo")) for r in rows), f"lie {i}: not decoded: {rows}")
     check(not any("Exception" in line or "Error" in line for line in phone.trace()), "the app failed")
     phone.shot("lied-to")
 

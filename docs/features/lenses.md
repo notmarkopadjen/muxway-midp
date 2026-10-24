@@ -52,7 +52,11 @@ spells lines as `-`, `|` and `+`, bullets as `*`, `❯` as `>`, and folds
 letters the charset lacks (the core's text-mode page has the table). The
 app decodes every answer by the charset in its `Content-Type`, so a hub
 that does not know the parameter, and keeps answering UTF-8, still shows
-as before. An install file may set it with `Muxway-Text`.
+as before. A relay may label everything UTF-8 whatever the hub sent, and
+some phones throw on bytes that are not UTF-8, so the app checks the
+bytes first and reads anything that is not well-formed UTF-8 as Latin-1,
+which can decode any byte. An install file may set it with
+`Muxway-Text`.
 
 ## The Claude Code lens
 

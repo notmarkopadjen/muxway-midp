@@ -203,9 +203,13 @@ class Relay:
                     return self.reply(200, hostile_claude_screen(), {"Content-Type": "text/plain"})
                 if relay.mode == "charset-hostile" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     # A relay that lies about the charset: the app must decode as UTF-8 and stay up.
-                    n = len(relay.requests) % 3
-                    lie = ["text/plain; charset=utf-7", "text/plain; charset=../../etc", "text/plain; charset=" + "x" * 300][n]
-                    return self.reply(200, (FIXTURES / "claude-code.txt").read_bytes(), {"Content-Type": lie})
+                    n = len(relay.requests) % 4
+                    lie = ["text/plain; charset=utf-7", "text/plain; charset=../../etc", "text/plain; charset=" + "x" * 300,
+                           "text/plain; charset=utf-8"][n]
+                    screen = (FIXTURES / "claude-code.txt").read_text()
+                    # The last lie is the one a real relay told: Latin-1 bytes labelled UTF-8.
+                    body = spelt(screen, "?charset=latin1")[0] if n == 3 else screen.encode()
+                    return self.reply(200, body, {"Content-Type": lie})
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection")}
                 c = http.client.HTTPConnection(relay.hub, timeout=20)
                 c.request(self.command, self.path, body=body or None, headers=headers)

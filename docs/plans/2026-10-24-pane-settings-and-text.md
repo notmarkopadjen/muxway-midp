@@ -179,6 +179,13 @@ when `charset` is asked for, so the fixture stays one file.
     read now hold the view's lock, the font is measured on the paint
     thread only (the emulator measures nothing on other threads), and the
     first read waits for that measurement.
+  - Found on the phone (0.3.0): the owner's relay labelled every answer
+    `charset=utf-8`, the hub's Latin-1 bytes hit the phone's UTF-8
+    decoder, and Nokia's decoder throws a RuntimeException, not the
+    IOException the app caught. 0.3.1 checks the bytes before choosing
+    the decoder, reads anything that is not well-formed UTF-8 as Latin-1
+    and survives any decoder failure the same way (U21, S08's fourth
+    lie). The relay now passes the hub's charset through as well.
 - [x] Security rules (AGENTS.md section 2) hold: one fixed query value,
       bounded pane records from hub-listed addresses, a decoder picked from
       two the app always had

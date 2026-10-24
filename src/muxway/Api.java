@@ -62,7 +62,7 @@ final class Api {
                 }
             }
             body = status == HttpConnection.HTTP_NO_CONTENT || status == 304 ? ""
-                : Text.screen(decode(raw, encoding(c.getHeaderField("Content-Type"))));
+                : Text.screen(decode(raw, c.getHeaderField("Content-Type")));
             return status;
         } finally {
             if (in != null) {
@@ -97,17 +97,30 @@ final class Api {
         }
     }
 
-    /** The encoding a Content-Type names: Latin-1 and ASCII as the hub spells them, UTF-8 for anything else. */
-    static String encoding(String contentType) {
+    /**
+     * The encoding to read an answer with: Latin-1 when the Content-Type
+     * says so, or when the bytes are not UTF-8 anyway (a relay may label
+     * everything UTF-8), else UTF-8.
+     */
+    static String encoding(String contentType, byte[] raw) {
         String t = contentType == null ? "" : contentType.toLowerCase();
-        return t.indexOf("charset=iso-8859-1") >= 0 || t.indexOf("charset=us-ascii") >= 0 ? "ISO-8859-1" : "UTF-8";
+        if (t.indexOf("charset=iso-8859-1") >= 0 || t.indexOf("charset=us-ascii") >= 0 || !Text.utf8(raw)) {
+            return "ISO-8859-1";
+        }
+        return "UTF-8";
     }
 
-    private static String decode(byte[] raw, String encoding) {
+    private static String decode(byte[] raw, String contentType) {
+        String encoding = encoding(contentType, raw);
         try {
             return new String(raw, encoding);
-        } catch (IOException e) {
-            return new String(raw);
+        } catch (Throwable e) {
+            // Some phones throw a RuntimeException for bytes they cannot decode; Latin-1 decodes anything.
+            try {
+                return new String(raw, "ISO-8859-1");
+            } catch (IOException e2) {
+                return new String(raw);
+            }
         }
     }
 

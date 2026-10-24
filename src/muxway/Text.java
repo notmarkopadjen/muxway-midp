@@ -77,6 +77,35 @@ final class Text {
         return a;
     }
 
+    /** True when the bytes are well-formed UTF-8; Latin-1 text with accents or symbols is not. */
+    static boolean utf8(byte[] b) {
+        int i = 0;
+        while (i < b.length) {
+            int c = b[i] & 0xff, n;
+            if (c < 0x80) {
+                n = 0;
+            } else if (c >= 0xc2 && c < 0xe0) {
+                n = 1;
+            } else if (c >= 0xe0 && c < 0xf0) {
+                n = 2;
+            } else if (c >= 0xf0 && c < 0xf5) {
+                n = 3;
+            } else {
+                return false;
+            }
+            if (i + n >= b.length) {
+                return false;
+            }
+            for (int j = 1; j <= n; j++) {
+                if ((b[i + j] & 0xc0) != 0x80) {
+                    return false;
+                }
+            }
+            i += n + 1;
+        }
+        return true;
+    }
+
     static int toInt(String s, int fallback) {
         try {
             return Integer.parseInt(s.trim());
