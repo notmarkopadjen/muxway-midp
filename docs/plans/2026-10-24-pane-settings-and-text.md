@@ -187,4 +187,9 @@ when `charset` is asked for, so the fixture stays one file.
 
 ## Test run
 
-(after the run)
+Run `20261023-235917-ef7bd09` at commit `ef7bd09`: passed, 97 tests (56
+unit, 20 end-to-end on each build, the log search), recorded as
+[issue #4](https://github.com/notmarkopadjen/muxway-midp/issues/4). The run before it had F17 fail on
+the small screen because the emulator's menu landed on Keys instead of
+Pane, the known menu quirk; F17 passed alone twice and in this run. The
+MIDP 1.0 JAR is 25.9 KiB.
