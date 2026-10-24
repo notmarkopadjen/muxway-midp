@@ -166,4 +166,7 @@ Examples use `alice`, `work`, `hub.example.com`.
 
 ## Test run
 
-To be recorded.
+Run `20261024-082734-86e4430` at commit `86e4430`: passed, 119 tests (unit,
+end-to-end and security), recorded as
+[issue #7](https://github.com/notmarkopadjen/muxway-midp/issues/7). The
+hub side ran in the core repository as issue #30 there.
