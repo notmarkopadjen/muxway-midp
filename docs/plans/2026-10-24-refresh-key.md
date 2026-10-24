@@ -61,4 +61,7 @@ One commit.
 
 ## Test run
 
-To be recorded.
+Run `20261024-102112-b504683` at commit `b504683`: passed, 133 tests,
+recorded as [issue #11](https://github.com/notmarkopadjen/muxway-midp/issues/11).
+The run before it, at `4d175ef` (the key alone), had the emulator's menu
+flake in F10 and is recorded as issue #10.
