@@ -105,14 +105,14 @@ final class ClaudeCode implements Lens {
         return a;
     }
 
-    /** True when the box rows hold nothing but the prompt mark. */
+    /** True when the box rows hold nothing but the prompt mark, or Claude's own hint (Try "..."). */
     private static boolean empty(String[] rows, int from, int to) {
         for (int i = from; i < to; i++) {
             String r = rows[i].trim();
             if (r.startsWith("\u276f") || r.startsWith(">")) {
                 r = r.substring(1).trim();
             }
-            if (r.length() > 0) {
+            if (r.length() > 0 && !(i == from && r.startsWith("Try \""))) {
                 return false;
             }
         }

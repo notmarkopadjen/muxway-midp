@@ -67,6 +67,8 @@ stateDiagram-v2
   the green call key of Nokia phones sends Enter. See
   [the pane view](features/pane-view.md).
 - **Reply** is a `TextBox`; control characters are removed before sending.
+  Send and Type return to the pane at once, where the wait mark runs
+  until the hub has answered; a refusal is shown over the pane.
 - **Keys** lists the protocol's named keys in plain words.
 - **Settings** keeps the token in a password field and never shows it
   again; an empty field keeps the stored one.

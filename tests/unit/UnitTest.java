@@ -119,6 +119,8 @@ public final class UnitTest {
         eq("claude_ascii_body", join(s[0]), " Claude Code v1.0| /home/alice/demo|> say pong|* pong");
         eq("claude_ascii_box", join(s[1]), "> hi");
         eq("claude_ascii_empty_box_hidden", String.valueOf(lens.shape(emptyBox(CLAUDE_ASCII), false, false)[1].length), "0");
+        String[] hint = {"a", DASHES, "> Try \"fix the bug\"", DASHES, "footer"};
+        eq("claude_box_with_claudes_hint_is_empty", String.valueOf(lens.shape(hint, false, false)[1].length), "0");
         s = lens.shape(CLAUDE_ASCII, true, false);
         eq("claude_ascii_reveal", join(s[0]), " Claude Code v1.0| /home/alice/demo|> say pong|* pong|* Crunched for 1s . done 8:41 PM|v Update installed . Restart to apply|> hi|" + FOOTER_ASCII);
         String[] noRules = {"a", "b", "", "\u276f fix it", "  footer"};

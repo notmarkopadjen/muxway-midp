@@ -92,7 +92,8 @@ lens shows the conversation and nothing else until `*`:
   starts with a spinner mark, `✻ ✽ ✶ ✢ ·` or `*` once folded, and names
   a duration such as `58s` or `5m 27s`);
 - hides the **input box** (the rows between the rules) when it holds
-  nothing but the prompt mark, and **pins** it to the bottom when
+  nothing but the prompt mark or Claude's own hint (`Try "..."`), and
+  **pins** it to the bottom when
   someone typed into it at the terminal; up to half of the screen,
   longer boxes show their last rows; the transcript scrolls above it;
 - drops the **blank rows** between the transcript and the chrome, which

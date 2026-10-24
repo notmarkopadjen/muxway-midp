@@ -207,12 +207,12 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             shortcut(PaneView.KEYS);
         } else if (d == reply && (c == send || c == type)) {
             String text = Text.printable(reply.getString());
+            // Back to the pane at once, where the wait mark runs; a refusal is shown over it.
+            display.setCurrent(view);
             if (text.length() > 0) {
                 start(c == send ? SEND : TYPE, text);
             } else if (c == send) {
                 start(KEY, "Enter");
-            } else {
-                display.setCurrent(view);
             }
         } else if (d == keys && c == List.SELECT_COMMAND) {
             start(KEY, KEYS[keys.getSelectedIndex()][1]);
