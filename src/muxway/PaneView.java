@@ -26,6 +26,8 @@ final class PaneView extends Canvas {
     private final Muxway app;
 
     String title = "";
+    // What the list called the pane; the overlay shows it.
+    String name = "";
     String address = "";
     boolean writable;
     Lens[] lenses = new Lens[0];
@@ -202,7 +204,7 @@ final class PaneView extends Canvas {
             g.drawString(v[i], 0, y0 + i * lh, Graphics.TOP | Graphics.LEFT);
         }
         if (info) {
-            bar(g, y0, (writable ? "> " : "  ") + title, null);
+            bar(g, y0, (writable ? "> " : "  ") + (name.length() > 0 ? name : title), null);
             int last = body.length - offset;
             int first = Math.max(0, last - bodyRows());
             bar(g, y0 + (n - 1) * lh, (first + 1) + "-" + last + "/" + body.length, "2/8 5 0 # *");

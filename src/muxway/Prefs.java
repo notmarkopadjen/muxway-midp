@@ -14,6 +14,8 @@ final class Prefs {
     int refresh;
     // How the hub spells what the phone cannot show: 0 Unicode, 1 Latin-1, 2 ASCII.
     int text = Ui.TEXT;
+    // A stamp of the install file's token last taken, so a new install file is taken once.
+    String installed = "";
 
     private String[] paneAddress = new String[0];
     private int[] paneView = new int[0];
@@ -53,20 +55,22 @@ final class Prefs {
     /** Fills the fields from one record; a short or old one leaves the newer fields at their defaults. */
     void read(String record) {
         String[] f = Text.split(record, '\n');
-        if (f.length < 5 || !(f[0].equals("1") || f[0].equals("2"))) {
+        int version = Text.toInt(f[0], 0);
+        if (f.length < 5 || version < 1 || version > 3) {
             return;
         }
         server = f[1];
         token = f[2];
         width = Text.toInt(f[3], width);
         refresh = Text.toInt(f[4], 0);
-        if (!f[0].equals("2")) {
+        if (version < 2) {
             return;
         }
         text = f.length > 5 ? Math.max(0, Math.min(2, Text.toInt(f[5], Ui.TEXT))) : Ui.TEXT;
+        installed = version >= 3 && f.length > 6 ? f[6] : "";
         paneAddress = new String[0];
         paneView = new int[0];
-        for (int i = 6; i < f.length; i++) {
+        for (int i = version >= 3 ? 7 : 6; i < f.length; i++) {
             String[] p = Text.split(f[i], '\t');
             if (p.length == 2 && p[0].length() > 0) {
                 setView(p[0], Math.max(0, Text.toInt(p[1], 0)));
@@ -75,9 +79,9 @@ final class Prefs {
     }
 
     String record() {
-        StringBuffer s = new StringBuffer("2\n");
+        StringBuffer s = new StringBuffer("3\n");
         s.append(server).append('\n').append(token).append('\n').append(width).append('\n');
-        s.append(refresh).append('\n').append(text);
+        s.append(refresh).append('\n').append(text).append('\n').append(installed);
         for (int i = 0; i < paneAddress.length; i++) {
             s.append('\n').append(paneAddress[i]).append('\t').append(paneView[i]);
         }

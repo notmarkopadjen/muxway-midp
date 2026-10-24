@@ -1,5 +1,31 @@
 # The pane view
 
+## The list
+
+Panes are listed by what runs in them, not by number: the pane's title,
+which a program sets for itself (Claude Code calls its terminal `✳ <session
+name>`), and the program in brackets, `* ✳ muxway android (claude)`. `*`
+marks a pane the token may write to, taken from the hub's `mode` column
+and never from the title. A title that says nothing, because it is empty,
+the program's name, or the host's name (tmux's default until a program
+sets one, and a host is usually named after its machine) gives way to the
+pane's place: `work/0.1 (bash)`. When the list holds panes of several
+hosts each entry starts with its host. Entries are cut at 64 characters;
+the phone scrolls long ones. On the MIDP 1.0 build the list is asked for
+in Latin-1 like the content (see [lenses](lenses.md)), so `✳` arrives as
+`*`.
+
+```mermaid
+flowchart LR
+    R["address TAB mode TAB command TAB title"] --> T{title empty,<br/>= command<br/>or = host?}
+    T -- no --> N["title (command)"]
+    T -- yes --> A["session/window.pane (command)"]
+    N --> M["mark from mode: '* ' or '  '"]
+    A --> M
+```
+
+## The screen
+
 The pane fills the whole screen. There is no title bar and no scroll
 marker: the pane's rows are drawn in the phone's small font from the left
 edge, bottom-aligned, so the last row is always a full one and the spare
@@ -44,7 +70,7 @@ stateDiagram-v2
 ## Overlay
 
 `#` draws two inverted rows over the pane: the top one with `>` for a
-writable pane and the pane's title, the bottom one with the rows on screen
+writable pane and the pane's name as the list showed it, the bottom one with the rows on screen
 out of the rows the app holds (`7-12/40`) and, when it fits next to that,
 the key hints. `#` again removes them. While a request is out a small wait
 bar runs in the top right corner, overlay or not.
@@ -93,3 +119,13 @@ worst), within the smallest target's heap. The pane records in the
 settings store hold only addresses the hub listed, at most 32, and a line
 that does not parse is dropped on read. The pane's content is traced only
 in test builds, as before.
+
+A program in a pane chooses its own title, so the list shows text an
+attacker on that host controls. The hub refuses titles with control
+characters or over 256 bytes, so a title cannot add a row or a column to
+the list; the app splits on TAB and takes the fourth field, caps the
+entry, and takes the writable mark from the hub. A title made to look
+like another pane (`work/0.0 (claude)` on a shell) misleads the eye only:
+the program in brackets is the hub's, and the hub decides what the token
+may write on every input. The owner exposed that pane; a program there
+already holds a shell. The end-to-end suite has these cases (S09).

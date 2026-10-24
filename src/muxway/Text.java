@@ -77,6 +77,30 @@ final class Text {
         return a;
     }
 
+    /**
+     * What the pane list shows for one row of the hub's text list
+     * (address, mode, command, title, kind): the title and, in brackets,
+     * the program. A title that is empty, the program's name or the host's
+     * name says nothing, so the pane's session/window.pane stands in. With
+     * panes of several hosts the host leads. Cut at 64 characters.
+     */
+    static String label(String[] f, boolean hosts) {
+        String address = f[0];
+        int slash = address.indexOf('/');
+        String host = slash < 0 ? address : address.substring(0, slash);
+        String rest = slash < 0 ? address : address.substring(slash + 1);
+        String command = f.length > 2 ? f[2].trim() : "";
+        String title = f.length > 3 ? f[3].trim() : "";
+        String name = title.length() == 0 || title.equals(command) || title.equals(host) ? rest : title;
+        if (hosts) {
+            name = host + "/" + name;
+        }
+        if (command.length() > 0) {
+            name += " (" + command + ")";
+        }
+        return name.length() > 64 ? name.substring(0, 64) : name;
+    }
+
     /** True when the bytes are well-formed UTF-8; Latin-1 text with accents or symbols is not. */
     static boolean utf8(byte[] b) {
         int i = 0;

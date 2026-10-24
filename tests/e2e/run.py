@@ -83,7 +83,7 @@ def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*",
 
 
 def open_pane(phone):
-    phone.expect(r"^Panes: .*work/0\.0", "pane list")
+    phone.expect(r"^Panes: .*test-pane \(bash\)", "pane list")
     phone.shot("panes")
     phone.click("select")
     phone.expect(r"^work/0\.0: ", "pane content")
@@ -193,6 +193,17 @@ def s08(run, name, profile):
         check(any(r.startswith(("\u276f fix the typo", "> fix the typo")) for r in rows), f"lie {i}: not decoded: {rows}")
     check(not any("Exception" in line or "Error" in line for line in phone.trace()), "the app failed")
     phone.shot("lied-to")
+
+
+@test("S09", "A relay that forges pane titles: the mark follows the mode column, long titles are cut", "e2e-security")
+def s09(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-title")
+    phone.expect(r"^Panes: ", "pane list")
+    labels = panes_shown(phone)
+    check(len(labels) == 2, f"{len(labels)} entries, expected 2: {labels}")
+    check(labels[0].startswith("  * " + HOST), f"a star in the title was taken for the mark: {labels[0]!r}")
+    check(labels[1].startswith("* xxxx") and len(labels[1]) <= 66, f"the long title was not cut: {labels[1]!r}")
+    phone.shot("forged")
 
 
 @test("S06", "Hostile Claude-like screen: 400-column and a thousand rules, control characters, a lying footer",
@@ -390,16 +401,24 @@ def f16(run, name, profile):
     phone.shot("typed")
 
 
-def second_pane(core):
+def second_pane(core, title="test-pane-2"):
     core.tmux_cmd("split-window", "-t", "work:0.0", "bash --norc --noprofile")
+    core.tmux_cmd("select-pane", "-t", "work:0.1", "-T", title)  # never the machine's own name
     core.cli("expose", "--tmux-name", core.tmux, "-t", "work:0.1", "--write")
+
+
+def panes_shown(phone):
+    """The entries of the pane list as last drawn."""
+    lists = [l for l in phone.trace() if l.startswith("Panes: ")]
+    check(lists, "no pane list drawn")
+    return [e for e in lists[-1][7:].split("|") if e]
 
 
 @test("F17", "Pane: View set to Plain for one pane shows its rules, is kept, and leaves other panes alone",
       "e2e-ui")
 def f17(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, mode="claude", before=second_pane)
-    phone.expect(r"^Panes: .*work/0\.1", "pane list with two panes")
+    phone.expect(r"^Panes: .*test-pane-2", "pane list with two panes")
     phone.click("select")
     phone.expect(r"^work/0\.0: .*Claude Code", "content")
     rows = phone.rows_after(0, "drawn")
@@ -472,6 +491,56 @@ def f19(run, name, profile):
     else:
         check(not charsets, f"asked for a charset: {charsets}")
         check(any(r.startswith("\u276f fix the typo") for r in rows), f"the prompt is not shown: {rows}")
+
+
+def host_named_pane(core):
+    second_pane(core, HOST)  # tmux's default title is the machine's name, and a host is often named after it
+
+
+@test("F20", "Panes listed by title and program: a title like the host falls back to the address, a program's own title shows",
+      "e2e-ui")
+def f20(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=host_named_pane)
+    phone.expect(r"^Panes: \* test-pane \(bash\)\|", "first pane by title")
+    labels = panes_shown(phone)
+    check(labels == ["* test-pane (bash)", "* work/0.1 (bash)"], f"list: {labels}")
+    phone.shot("list")
+    # The program in the first pane names itself the way Claude Code does.
+    core.tmux_cmd("send-keys", "-t", "work:0.0", "-l", "printf '\\033]2;\u2733 build\\a'")
+    core.tmux_cmd("send-keys", "-t", "work:0.0", "Enter")
+    wait_for("title set", lambda: "build" in core.tmux_cmd("display-message", "-p", "-t", "work:0.0", "#{pane_title}"))
+    time.sleep(1.2)  # the hub lists panes from a one-second cache
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.click("pound")
+    time.sleep(0.5)
+    phone.shot("overlay")
+    phone.menu(1)  # Back
+    mark = "\\*" if profile == "midp1" else "\u2733"
+    phone.expect(r"^Panes: \* " + mark + r" build \(bash\)\|", "the program's title, spelt for the phone")
+    phone.shot("titled")
+
+
+@test("J14", "A new install file replaces the saved token; the same one is taken once", "e2e")
+def j14(run, name, profile):
+    logs = run.logs(name)
+    core = Core(run, run.binary, logs).start()
+    run.cleanups.append(core.close)
+    first, second = core.token(), core.token()
+    relay = Relay(core.url, logs, "normal")
+    run.cleanups.append(relay.close)
+    home = Path(run.tmp) / f"home-{name}-{profile}"
+    home.mkdir()
+    phone = Phone(run, name, profile, {"Muxway-Server": relay.url, "Muxway-Token": first}, home=home)
+    phone.expect(r"^Panes: ", "list with the first token")
+    phone.close()
+    n = len(relay.requests)
+    phone = Phone(run, name, profile, {"Muxway-Server": relay.url, "Muxway-Token": second}, home=home)
+    run.cleanups.append(phone.close)
+    phone.expect(r"^Panes: ", "list after the reinstall")
+    used = [r["headers"].get("X-Muxway-Token") for r in relay.requests]
+    check(used[:n] and all(t == first for t in used[:n]), "the first install did not use its token")
+    check(used[n:] and all(t == second for t in used[n:]), f"the reinstall kept the old token")
 
 
 @test("J13", "Without settings in the install file the app opens Settings", "e2e-ui")

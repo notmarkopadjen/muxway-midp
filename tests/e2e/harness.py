@@ -217,6 +217,10 @@ class Relay:
                 data = r.read()
                 if relay.mode == "lie-writable" and self.path.split("?")[0] == "/v1/panes":
                     data = data.replace(b"\tread\t", b"\twrite\t")
+                if relay.mode == "lie-title" and self.path.split("?")[0] == "/v1/panes":
+                    # Titles a program could choose: one that looks like a writable entry, one too long.
+                    data = (f"{HOST}/work/0.0\tread\tbash\t* {HOST}/work/0.0 claude\twrite\tx\n"
+                            f"{HOST}/work/0.0\twrite\tbash\t{'x' * 300}\t\n").encode()
                 self.reply(r.status, data, {k: v for k, v in r.getheaders() if k.lower() in ("etag", "content-type")})
 
             def reply(self, status, data, headers):
@@ -251,7 +255,8 @@ SKINS = {
 
 
 class Phone:
-    def __init__(self, run, test, profile, props):
+    def __init__(self, run, test, profile, props, home=None):
+        """home: a directory for the record store, so a second Phone with the same home is a reinstall."""
         self.run, self.test, self.profile = run, test, profile
         self.device = "n96x65" if profile == "midp1" else "default"
         self.skin = SKINS[self.device]
@@ -266,8 +271,11 @@ class Phone:
         self.out = run.logs(test) / f"emulator-{profile}.log"
         self.shots = run.screens(test, profile)
         self.step = 0
-        cmd = [JAVA, "-Djavax.accessibility.assistive_technologies=", "-cp", f"{EMULATOR}:{DEVICES}",
-               "org.microemu.app.Main", "--rms", "memory"]
+        cmd = [JAVA, "-Djavax.accessibility.assistive_technologies=", "-cp", f"{EMULATOR}:{DEVICES}"]
+        if home:
+            cmd += [f"-Duser.home={home}", "org.microemu.app.Main", "--rms", "file"]
+        else:
+            cmd += ["org.microemu.app.Main", "--rms", "memory"]
         if self.device != "default":
             cmd += ["--device", f"{self.device}/device.xml"]
         cmd.append(str(self.dir / f"{name}.jad"))

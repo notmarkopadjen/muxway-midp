@@ -53,6 +53,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
     private final List panes = new List("muxway", List.IMPLICIT);
     private final Vector addresses = new Vector();
+    private final Vector names = new Vector();
     private final Vector writable = new Vector();
     private PaneView view;
     private final TextBox reply = new TextBox("Reply", "", 500, TextField.ANY);
@@ -125,12 +126,15 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         String version = getAppProperty("MIDlet-Version");
         api = new Api(prefs, "muxway-midp/" + (version == null ? "?" : version) + " " + Ui.PROFILE);
         prefs.load();
-        if (!prefs.ready()) {
-            String s = getAppProperty("Muxway-Server");
-            String t = getAppProperty("Muxway-Token");
-            if (s != null && t != null && s.trim().length() > 0 && t.trim().length() > 0) {
+        String s = getAppProperty("Muxway-Server");
+        String t = getAppProperty("Muxway-Token");
+        if (s != null && t != null && s.trim().length() > 0 && t.trim().length() > 0) {
+            // A new install file replaces what is saved, once; Settings may change it after.
+            String stamp = Integer.toString(t.trim().hashCode());
+            if (!prefs.ready() || !stamp.equals(prefs.installed)) {
                 prefs.server = s.trim();
                 prefs.token = t.trim();
+                prefs.installed = stamp;
                 String r = getAppProperty("Muxway-Refresh");
                 if (r != null) {
                     prefs.refresh = Math.max(0, Math.min(600, Text.toInt(r, 0)));
@@ -166,7 +170,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         } else if (d == setup && c == ok) {
             saveSetup();
         } else if (d == view && c == paneCmd) {
-            pane = new List(view.title, List.IMPLICIT, viewNames(), null);
+            pane = new List(view.name, List.IMPLICIT, viewNames(), null);
             pane.setSelectedIndex(Math.min(prefs.view(view.address), pane.size() - 1), true);
             pane.addCommand(back);
             pane.setCommandListener(this);
@@ -286,6 +290,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view = new PaneView(frames, this);
         view.address = address;
         view.title = address.substring(address.indexOf('/') + 1);
+        view.name = (String) names.elementAt(i);
         view.writable = canWrite;
         view.cols = prefs.width;
         view.lenses = LENSES;
@@ -441,7 +446,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private String etag = "";
 
     private void list() throws IOException {
-        if (api.call("panes", null, null) != 200) {
+        if (api.call("panes" + (charset().length() > 0 ? "?" + charset() : ""), null, null) != 200) {
             problem(api.status);
             return;
         }
@@ -450,17 +455,33 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             panes.delete(i);
         }
         addresses.removeAllElements();
+        names.removeAllElements();
         writable.removeAllElements();
+        // Hosts are named in the list only when there is more than one.
+        String host = null;
+        boolean several = false;
+        for (int i = 0; i < rows.length; i++) {
+            int slash = rows[i].indexOf('/');
+            int tab = rows[i].indexOf('\t');
+            if (slash > 0 && tab > slash) {
+                String h = rows[i].substring(0, slash);
+                several |= host != null && !host.equals(h);
+                host = h;
+            }
+        }
         StringBuffer shown = new StringBuffer();
         for (int i = 0; i < rows.length; i++) {
             String[] f = Text.split(rows[i], '\t');
             if (f.length < 3) {
                 continue;
             }
+            // The mark comes from the hub's mode column, never from the title.
             boolean w = f[1].equals("write");
-            String label = (w ? "* " : "  ") + f[0] + " " + f[2];
+            String name = Text.label(f, several);
+            String label = (w ? "* " : "  ") + name;
             panes.append(label, null);
             addresses.addElement(f[0]);
+            names.addElement(name);
             writable.addElement(new Boolean(w));
             shown.append(label).append('\n');
         }
@@ -482,13 +503,18 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         display.setCurrent(panes);
     }
 
+    /** The query parameter for the Text setting; empty for Unicode. */
+    private String charset() {
+        return prefs.text == 1 ? "charset=latin1" : prefs.text == 2 ? "charset=ascii" : "";
+    }
+
     private void read(String ifNoneMatch) throws IOException {
         if (view == null) {
             return;
         }
         // The rows as they are on the terminal; the phone wraps them itself.
         String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=400"
-            + (prefs.text == 1 ? "&charset=latin1" : prefs.text == 2 ? "&charset=ascii" : "");
+            + (charset().length() > 0 ? "&" + charset() : "");
         int status = api.call(path, null, ifNoneMatch);
         if (status == 304) {
             return;

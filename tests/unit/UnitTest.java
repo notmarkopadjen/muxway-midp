@@ -124,13 +124,13 @@ public final class UnitTest {
     private static void prefsTests() {
         Prefs p = new Prefs();
         p.read("1\nhttp://relay.example.com\nabc\n0\n5\n1");
-        eq("prefs_old_record_reads_with_defaults", p.record(), "2\nhttp://relay.example.com\nabc\n0\n5\n" + Ui.TEXT);
+        eq("prefs_old_record_reads_with_defaults", p.record(), "3\nhttp://relay.example.com\nabc\n0\n5\n" + Ui.TEXT + "\n");
         eq("prefs_unknown_pane_is_auto", String.valueOf(p.view("h/work/0.0")), "0");
         p.setView("h/work/0.0", 1);
         p.setView("h/work/1.0", 2);
         p.setView("h/work/0.0", 2);
         p.text = 2;
-        eq("prefs_panes_in_record", p.record(), "2\nhttp://relay.example.com\nabc\n0\n5\n2\nh/work/0.0\t2\nh/work/1.0\t2");
+        eq("prefs_panes_in_record", p.record(), "3\nhttp://relay.example.com\nabc\n0\n5\n2\n\nh/work/0.0\t2\nh/work/1.0\t2");
         Prefs q = new Prefs();
         q.read(p.record() + "\nbroken line\n\tno address\nh/work/2.0\tx");
         eq("prefs_record_round_trip", String.valueOf(q.view("h/work/1.0")) + q.view("h/work/0.0") + q.text, "222");
@@ -139,9 +139,35 @@ public final class UnitTest {
             q.setView("h/s/" + i + ".0", 1);
         }
         eq("prefs_cap_drops_oldest", String.valueOf(q.view("h/work/0.0")) + q.view("h/s/7.0") + q.view("h/s/8.0") + q.view("h/s/39.0"), "0011");
-        eq("prefs_cap_size", String.valueOf(Text.split(q.record(), '\n').length), String.valueOf(6 + Prefs.PANES));
-        q.read("3\nx\ny\n0\n0");
+        eq("prefs_cap_size", String.valueOf(Text.split(q.record(), '\n').length), String.valueOf(7 + Prefs.PANES));
+        q.read("4\nx\ny\n0\n0");
         eq("prefs_unknown_version_ignored", q.server, "http://relay.example.com");
+        q.read("2\nhttp://relay.example.com\nabc\n0\n5\n1\nh/work/0.0\t1");
+        eq("prefs_v2_record_has_no_stamp", q.installed + q.view("h/work/0.0"), "1");
+        q.installed = "12345";
+        q.setView("h/work/3.0", 2);
+        Prefs r = new Prefs();
+        r.read(q.record());
+        eq("prefs_v3_record_round_trip", r.installed + r.view("h/work/0.0") + r.view("h/work/3.0"), "1234512");
+    }
+
+    private static String label(String row, boolean hosts) {
+        return Text.label(Text.split(row, '\t'), hosts);
+    }
+
+    private static void labelTests() {
+        eq("label_title_and_command", label("alice/work/0.0\twrite\tclaude\t* muxway android\t", false), "* muxway android (claude)");
+        eq("label_empty_title_is_address", label("alice/work/0.1\twrite\tbash\t\t", false), "work/0.1 (bash)");
+        eq("label_title_like_command_is_address", label("alice/work/0.1\tread\tbash\tbash\t", false), "work/0.1 (bash)");
+        eq("label_title_like_host_is_address", label("alice/work/0.1\tread\tbash\talice\t", false), "work/0.1 (bash)");
+        eq("label_several_hosts_name_the_host", label("alice/work/0.0\twrite\tclaude\tbuild\t", true), "alice/build (claude)");
+        eq("label_missing_columns", label("alice/work/0.0\twrite\tbash", false), "work/0.1 (bash)".replace("0.1", "0.0"));
+        String big = "alice/work/0.0\tread\tbash\t";
+        for (int i = 0; i < 300; i++) {
+            big += "x";
+        }
+        eq("label_cut_at_64", String.valueOf(label(big, false).length()), "64");
+        eq("label_tab_in_title_takes_the_first_part", label("alice/work/0.0\tread\tbash\tsafe\twrite\tmore", false), "safe (bash)");
     }
 
     private static void pixelTests() {
@@ -164,6 +190,7 @@ public final class UnitTest {
         lensAsciiTests();
         wrapTests();
         prefsTests();
+        labelTests();
         pixelTests();
         byte[] ascii = "plain".getBytes();
         byte[] utf8 = {(byte) 0xe2, (byte) 0x94, (byte) 0x80, 'x'};
