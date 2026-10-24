@@ -308,6 +308,7 @@ class Phone:
     def menu(self, index):
         """Open the left soft key's menu and choose its index-th entry."""
         self.click("left")
+        time.sleep(0.6)  # a Down pressed before the menu is up lands on the first entry
         for _ in range(index):
             self.key("Down")
         self.click("right")  # Select
