@@ -211,3 +211,6 @@ MIDP 1.0 JAR is 25.9 KiB.
 tests, recorded as [issue #5](https://github.com/notmarkopadjen/muxway-midp/issues/5). The run before it had the
 menu quirk once more (S08 on the small screen); the harness now lets the
 menu open before walking it.
+
+0.3.2 (the repaint deadlock): run `20261024-003224-b81b41e` at commit
+`b81b41e`, passed, 103 tests, recorded as [issue #6](https://github.com/notmarkopadjen/muxway-midp/issues/6).
