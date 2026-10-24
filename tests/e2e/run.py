@@ -202,7 +202,8 @@ def s09(run, name, profile):
     phone.expect(r"^Panes: ", "pane list")
     labels = panes_shown(phone)
     check(len(labels) == 2, f"{len(labels)} entries, expected 2: {labels}")
-    check(labels[0].startswith("  * " + HOST), f"a star in the title was taken for the mark: {labels[0]!r}")
+    # The title's own "* " is dropped as decoration; the mark stays the hub's read-only blank.
+    check(labels[0].startswith("  " + HOST + "/work/0.0 claude"), f"a star in the title was taken for the mark: {labels[0]!r}")
     check(labels[1].startswith("* xxxx") and len(labels[1]) <= 66, f"the long title was not cut: {labels[1]!r}")
     phone.shot("forged")
 
