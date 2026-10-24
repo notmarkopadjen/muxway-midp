@@ -4,9 +4,10 @@
 
 Panes are listed by what runs in them, not by number: the pane's title,
 which a program sets for itself (Claude Code calls its terminal `✳ <session
-name>`), and the program in brackets, `* ✳ muxway android (claude)`. `*`
+name>`), and the program in brackets, `* muxway android (claude)`. `*`
 marks a pane the token may write to, taken from the hub's `mode` column
-and never from the title. A title that says nothing, because it is empty,
+and never from the title; a mark leading the title (`✳`, or `*` once
+folded) is dropped, it is decoration. A title that says nothing, because it is empty,
 the program's name, or the host's name (tmux's default until a program
 sets one, and a host is usually named after its machine) gives way to the
 pane's place: `work/0.1 (bash)`. When the list holds panes of several

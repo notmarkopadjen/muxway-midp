@@ -39,23 +39,40 @@ public final class UnitTest {
 
     private static final String RULE = "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500";
 
-    // A Claude Code screen after one exchange, the way the hub's text mode returns it.
+    private static final String FOOTER = "  \u23f5\u23f5 auto mode on (shift+tab to cycle) \u00b7 \u2190 5 agents";
+    private static final String NAMED = repeat('\u2500', 40) + " demo \u2500";
+    private static final String SUMMARY = "\u273b Crunched for 1s \u00b7 done 8:41 PM";
+    private static final String NOTICE = "        \u2193 Update installed \u00b7 Restart to apply";
+
+    // A Claude Code screen after one exchange, the way the hub's text mode returns it, with text typed in the box.
     private static final String[] CLAUDE = {
-        " Claude Code v1.0", " /home/alice/demo", "\u276f say pong", "\u25cf pong", "", "",
-        "                                              \u25cf high \u00b7 /effort",
-        RULE, "\u276f", RULE, "  \u23f5\u23f5 auto mode on (shift+tab to cycle) \u00b7 \u2190 5 agents",
+        " Claude Code v1.0", " /home/alice/demo", "\u276f say pong", "\u25cf pong", "", SUMMARY, "", NOTICE,
+        NAMED, "\u276f hi", RULE, FOOTER,
     };
+
+    private static String[] emptyBox(String[] rows) {
+        String[] out = new String[rows.length];
+        for (int i = 0; i < rows.length; i++) {
+            out[i] = rows[i].equals("\u276f hi") ? "\u276f" : rows[i].equals("> hi") ? ">" : rows[i];
+        }
+        return out;
+    }
 
     private static void lensTests() {
         ClaudeCode lens = new ClaudeCode();
         String[][] s = lens.shape(CLAUDE, false, false);
         eq("claude_body_ends_at_transcript", join(s[0]), " Claude Code v1.0| /home/alice/demo|\u276f say pong|\u25cf pong");
-        eq("claude_box_pinned_footer_hidden", join(s[1]), "\u276f");
+        eq("claude_typed_box_pinned_chrome_hidden", join(s[1]), "\u276f hi");
+        s = lens.shape(emptyBox(CLAUDE), false, false);
+        eq("claude_empty_box_hidden", join(s[0]) + "/" + s[1].length, " Claude Code v1.0| /home/alice/demo|\u276f say pong|\u25cf pong/0");
         s = lens.shape(CLAUDE, true, false);
-        eq("claude_reveal_status_box_footer", join(s[1]),
-            "\u25cf high \u00b7 /effort|\u276f|"
-            + "  \u23f5\u23f5 auto mode on (shift+tab to cycle) \u00b7 \u2190 5 agents");
-        eq("claude_body_same_when_revealed", String.valueOf(s[0].length), "4");
+        eq("claude_reveal_in_place_without_rules", join(s[0]),
+            " Claude Code v1.0| /home/alice/demo|\u276f say pong|\u25cf pong|" + SUMMARY + "|" + NOTICE.trim() + "|\u276f hi|" + FOOTER);
+        eq("claude_reveal_pins_nothing", String.valueOf(s[1].length), "0");
+        eq("summary_rows", String.valueOf(ClaudeCode.summary(SUMMARY)) + ClaudeCode.summary("* Puttering... (37s \u00b7 v 1.6k tokens)")
+            + ClaudeCode.summary("\u25cf pong") + ClaudeCode.summary("\u25cf done at 8:41 PM") + ClaudeCode.summary("* 1.6k tokens"), "truetruefalsefalsefalse");
+        eq("rule_with_name_only_loose", String.valueOf(ClaudeCode.rule(NAMED, true)) + ClaudeCode.rule(NAMED, false)
+            + ClaudeCode.rule("\u2500\u2500\u2500 demo", true) + ClaudeCode.rule(RULE + " my session name", true), "truefalsefalsefalse");
         String[] shell = {"$ ls", "a b c", "$"};
         eq("claude_ignores_a_shell", String.valueOf(lens.shape(shell, false, false)), "null");
         String[] one = {"text", RULE, "\u276f typed"};
@@ -86,11 +103,12 @@ public final class UnitTest {
 
     private static final String DASHES = "----------------------------------------";
 
+    private static final String FOOTER_ASCII = "  >> auto mode on (shift+tab to cycle) . < 5 agents";
+
     // The same screen once the hub spelt it in ASCII for a Latin-1 phone.
     private static final String[] CLAUDE_ASCII = {
-        " Claude Code v1.0", " /home/alice/demo", "> say pong", "* pong", "", "",
-        "                                              * high . /effort",
-        DASHES, ">", DASHES, "  >> auto mode on (shift+tab to cycle) . < 5 agents",
+        " Claude Code v1.0", " /home/alice/demo", "> say pong", "* pong", "", "* Crunched for 1s . done 8:41 PM", "",
+        "        v Update installed . Restart to apply", DASHES + " demo -", "> hi", DASHES, FOOTER_ASCII,
     };
 
     private static void lensAsciiTests() {
@@ -99,17 +117,25 @@ public final class UnitTest {
         eq("rule_ascii_not_mixed", String.valueOf(ClaudeCode.rule(DASHES + "x")) + ClaudeCode.rule("--- a/file"), "falsefalse");
         String[][] s = lens.shape(CLAUDE_ASCII, false, false);
         eq("claude_ascii_body", join(s[0]), " Claude Code v1.0| /home/alice/demo|> say pong|* pong");
-        eq("claude_ascii_box", join(s[1]), ">");
+        eq("claude_ascii_box", join(s[1]), "> hi");
+        eq("claude_ascii_empty_box_hidden", String.valueOf(lens.shape(emptyBox(CLAUDE_ASCII), false, false)[1].length), "0");
         s = lens.shape(CLAUDE_ASCII, true, false);
-        eq("claude_ascii_reveal", join(s[1]), "* high . /effort|>|  >> auto mode on (shift+tab to cycle) . < 5 agents");
+        eq("claude_ascii_reveal", join(s[0]), " Claude Code v1.0| /home/alice/demo|> say pong|* pong|* Crunched for 1s . done 8:41 PM|v Update installed . Restart to apply|> hi|" + FOOTER_ASCII);
         String[] noRules = {"a", "b", "", "\u276f fix it", "  footer"};
         eq("claude_auto_needs_rules", String.valueOf(lens.shape(noRules, false, false)), "null");
         s = lens.shape(noRules, false, true);
         eq("claude_forced_pins_prompt", join(s[0]) + "/" + join(s[1]), "a|b/\u276f fix it");
         s = lens.shape(noRules, true, true);
-        eq("claude_forced_reveal_shows_footer", join(s[1]), "\u276f fix it|  footer");
+        eq("claude_forced_reveal_shows_all_in_place", join(s[0]) + "/" + s[1].length, "a|b|\u276f fix it|  footer/0");
+        String[] noRulesChrome = {"a", "\u273b Crunched for 2s", "", "        \u2193 Update installed", "\u276f", "  footer"};
+        s = lens.shape(noRulesChrome, false, true);
+        eq("claude_forced_hides_summary_and_notice", join(s[0]) + "/" + s[1].length, "a/0");
+        s = lens.shape(noRulesChrome, true, true);
+        eq("claude_forced_reveal_chrome_in_place", join(s[0]), "a|\u273b Crunched for 2s|\u2193 Update installed|\u276f|  footer");
         String[] ascii = {"x", "> ", "y"};
-        eq("claude_forced_ascii_prompt", join(lens.shape(ascii, false, true)[1]), "> ");
+        s = lens.shape(ascii, false, true);
+        eq("claude_forced_empty_ascii_prompt_hidden", join(s[0]) + "/" + s[1].length, "x/0");
+        eq("claude_runs_claude_only", String.valueOf(lens.runs("claude")) + lens.runs("bash") + lens.runs(""), "truefalsefalse");
         String[] shell = {"$ ls", "a b c", "$ "};
         eq("claude_forced_without_prompt_is_null", String.valueOf(lens.shape(shell, false, true)), "null");
         String[] far = new String[12];
@@ -118,7 +144,7 @@ public final class UnitTest {
         }
         eq("claude_forced_looks_at_last_eight_only", String.valueOf(lens.shape(far, false, true)), "null");
         s = lens.shape(CLAUDE, false, true);
-        eq("claude_forced_with_rules_as_auto", join(s[1]), "\u276f");
+        eq("claude_forced_with_rules_as_auto", join(s[1]), "\u276f hi");
     }
 
     private static void prefsTests() {
@@ -156,7 +182,9 @@ public final class UnitTest {
     }
 
     private static void labelTests() {
-        eq("label_title_and_command", label("alice/work/0.0\twrite\tclaude\t* muxway android\t", false), "* muxway android (claude)");
+        eq("label_title_and_command", label("alice/work/0.0\twrite\tclaude\tmuxway android\t", false), "muxway android (claude)");
+        eq("label_drops_claudes_mark", label("alice/work/0.0\twrite\tclaude\t\u2733 build\t", false) + "|" + label("alice/work/0.0\twrite\tclaude\t* build\t", false), "build (claude)|build (claude)");
+        eq("label_mark_alone_is_address", label("alice/work/0.0\twrite\tclaude\t\u2733 \t", false), "work/0.0 (claude)");
         eq("label_empty_title_is_address", label("alice/work/0.1\twrite\tbash\t\t", false), "work/0.1 (bash)");
         eq("label_title_like_command_is_address", label("alice/work/0.1\tread\tbash\tbash\t", false), "work/0.1 (bash)");
         eq("label_title_like_host_is_address", label("alice/work/0.1\tread\tbash\talice\t", false), "work/0.1 (bash)");

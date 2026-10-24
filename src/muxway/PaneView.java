@@ -31,6 +31,8 @@ final class PaneView extends Canvas {
     String address = "";
     boolean writable;
     Lens[] lenses = new Lens[0];
+    // The program in the pane, as the hub named it; Auto picks a lens by it first.
+    String command = "";
     // Wrap width in columns; 0 fits the screen by measured pixels.
     int cols;
     // 0 asks every lens, 1 none, 2 and up forces one lens by its number.
@@ -101,6 +103,8 @@ final class PaneView extends Canvas {
     private void toggleReveal() {
         synchronized (this) {
             reveal = !reveal;
+            // What was hidden sits at the bottom: show it.
+            offset = 0;
             shape();
         }
         show();
@@ -111,6 +115,11 @@ final class PaneView extends Canvas {
         if (mode >= 2 && mode - 2 < lenses.length) {
             shaped = lenses[mode - 2].shape(raw, reveal, true);
         } else if (mode == 0) {
+            for (int i = 0; i < lenses.length && shaped == null; i++) {
+                if (lenses[i].runs(command)) {
+                    shaped = lenses[i].shape(raw, reveal, true);
+                }
+            }
             for (int i = 0; i < lenses.length && shaped == null; i++) {
                 shaped = lenses[i].shape(raw, reveal, false);
             }

@@ -52,7 +52,7 @@ stateDiagram-v2
 ```
 
 - **Panes** is a `List` of the panes the token can read, from
-  `GET /v1/panes` in text mode, each by its title and program (`* ✳ build
+  `GET /v1/panes` in text mode, each by its title and program (`* build
   (claude)`, or `work/0.1 (bash)` when the title says nothing); `*` marks
   writable ones, offline hosts follow with `-`.
 - **Pane** is a `Canvas`, not a `Form`: a MIDP 1.0 form opens at its top

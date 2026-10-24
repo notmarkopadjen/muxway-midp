@@ -81,7 +81,8 @@ final class Text {
      * What the pane list shows for one row of the hub's text list
      * (address, mode, command, title, kind): the title and, in brackets,
      * the program. A title that is empty, the program's name or the host's
-     * name says nothing, so the pane's session/window.pane stands in. With
+     * name says nothing, so the pane's session/window.pane stands in; a
+     * leading mark is dropped. With
      * panes of several hosts the host leads. Cut at 64 characters.
      */
     static String label(String[] f, boolean hosts) {
@@ -91,6 +92,12 @@ final class Text {
         String rest = slash < 0 ? address : address.substring(slash + 1);
         String command = f.length > 2 ? f[2].trim() : "";
         String title = f.length > 3 ? f[3].trim() : "";
+        // Claude Code's mark in front of its title is decoration; the list has a mark of its own.
+        if (title.startsWith("\u2733 ") || title.startsWith("* ")) {
+            title = title.substring(2).trim();
+        } else if (title.equals("\u2733") || title.equals("*")) {
+            title = "";
+        }
         String name = title.length() == 0 || title.equals(command) || title.equals(host) ? rest : title;
         if (hosts) {
             name = host + "/" + name;

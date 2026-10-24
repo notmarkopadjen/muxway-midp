@@ -152,7 +152,8 @@ class Core:
 
 # What the hub makes of Claude Code's characters for a Latin-1 or ASCII phone.
 ASCII_ART = {"\u2500": "-", "\u2501": "-", "\u2550": "=", "\u276f": ">", "\u25cf": "*", "\u00b7": ".",
-             "\u23f5": ">", "\u2190": "<", "\u2192": ">", "\u2026": "..."}
+             "\u23f5": ">", "\u2190": "<", "\u2192": ">", "\u2193": "v", "\u2026": "...", "\u273b": "*",
+             "\u2733": "*"}
 
 
 def spelt(screen, path):
@@ -173,6 +174,8 @@ class Relay:
     def __init__(self, hub_url, logs, mode="normal"):
         self.hub = hub_url.replace("http://", "")
         self.mode = mode
+        # The list names the program claude, so Auto picks the lens by it.
+        self.says_claude = False
         self.log = open(logs / "relay.log", "a")
         self.requests = []
         self.port = free_port()
@@ -194,10 +197,13 @@ class Relay:
                     return self.reply(200, b"x" * (1 << 20) + b"\n", {})
                 if relay.mode == "garbage" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     return self.reply(200, b"ok \xff\xfe\xc3 \x1b[31mred\x1b[0m \x07bell \x00nul\r\nend\n", {})
-                if relay.mode in ("claude", "claude-norules") and self.command == "GET" and self.path.startswith("/v1/panes/"):
+                if relay.mode in ("claude", "claude-norules", "claude-empty") and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     screen = (FIXTURES / "claude-code.txt").read_text()
-                    if relay.mode == "claude-norules":
+                    if relay.mode != "claude":
+                        # No rules; claude-empty has nothing typed in the box either.
                         screen = "\n".join(r for r in screen.split("\n") if not r.startswith("\u2500"))
+                    if relay.mode == "claude-empty":
+                        screen = screen.replace("\u276f fix the typo in README", "\u276f")
                     return self.reply(200, *spelt(screen, self.path))
                 if relay.mode == "claude-hostile" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     return self.reply(200, hostile_claude_screen(), {"Content-Type": "text/plain"})
@@ -217,6 +223,8 @@ class Relay:
                 data = r.read()
                 if relay.mode == "lie-writable" and self.path.split("?")[0] == "/v1/panes":
                     data = data.replace(b"\tread\t", b"\twrite\t")
+                if relay.says_claude and self.path.split("?")[0] == "/v1/panes":
+                    data = data.replace(b"\tbash\t", b"\tclaude\t")  # the program column says claude
                 if relay.mode == "lie-title" and self.path.split("?")[0] == "/v1/panes":
                     # Titles a program could choose: one that looks like a writable entry, one too long.
                     data = (f"{HOST}/work/0.0\tread\tbash\t* {HOST}/work/0.0 claude\twrite\tx\n"

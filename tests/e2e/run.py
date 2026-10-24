@@ -64,7 +64,7 @@ class Run:
 
 
 def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*", write=f"{HOST}/*",
-          props=None, revoke=False, before=None):
+          props=None, revoke=False, before=None, says_claude=False):
     logs = run.logs(name)
     core = Core(run, run.binary, logs).start(expose=expose)
     run.cleanups.append(core.close)
@@ -72,6 +72,7 @@ def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*",
     if revoke:
         core.revoke_all()
     relay = Relay(core.url, logs, mode)
+    relay.says_claude = says_claude
     run.cleanups.append(relay.close)
     if before:
         before(core)  # the tmux side a test wants in place before the phone looks
@@ -206,6 +207,17 @@ def s09(run, name, profile):
     phone.shot("forged")
 
 
+@test("S10", "A relay that says a shell runs claude: the lens applied by program hides nothing of a shell", "e2e-security")
+def s10(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, says_claude=True)
+    phone.expect(r"^Panes: .*\(claude\)", "list says claude")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    rows = phone.rows_after(0, "drawn")
+    check(rows[-1].startswith("$"), f"the shell's prompt is not the last row: {rows}")
+    phone.shot("shell-as-claude")
+
+
 @test("S06", "Hostile Claude-like screen: 400-column and a thousand rules, control characters, a lying footer",
       "e2e-security")
 def s06(run, name, profile):
@@ -322,7 +334,10 @@ def f11(run, name, profile):
     phone.shot("no-connection")
 
 
-@test("F14", "Claude Code lens: rules gone, footer hidden, the input box stays at the bottom while scrolling",
+CHROME = ("shift+tab", "Update installed", "Crunched for")  # each short enough to survive wrapping
+
+
+@test("F14", "Claude Code lens: rules, summary, notice and footer hidden, the typed box stays at the bottom while scrolling, * shows all",
       "e2e-ui")
 def f14(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, mode="claude")
@@ -333,8 +348,8 @@ def f14(run, name, profile):
     # The small build asks for Latin-1, so the hub (here the relay) spells the prompt as >.
     box = [i for i, r in enumerate(rows) if r.startswith(("\u276f fix the typo", "> fix the typo"))]
     check(box and box[0] >= len(rows) - 2, f"input box not at the bottom: {rows}")
-    check(not any("\u2500" in r or "----" in r for r in rows), f"a rule is shown: {rows}")
-    check(not any("shift+tab" in r or "/effort" in r for r in rows), f"footer or status shown: {rows}")
+    check(not any("\u2500" in r or "----" in r or "demo" in r for r in rows), f"a rule is shown: {rows}")
+    check(not any(c in r for r in rows for c in CHROME), f"chrome shown: {rows}")
     check(rows[box[0] - 1].strip(), f"blank row above the box: {rows}")
     time.sleep(1)
     phone.shot("claude")
@@ -345,11 +360,19 @@ def f14(run, name, profile):
     check(scrolled[:box[0]] != rows[:box[0]], "2 did not scroll")
     check(scrolled[box[0]] == rows[box[0]], f"the box moved while scrolling: {scrolled}")
     phone.shot("scrolled")
+    # * shows the chrome in place, footer last, no rule.
     n = len(phone.trace())
     phone.click("star")
-    revealed = phone.rows_after(n, "revealed")
-    check(any("shift+tab" in r for r in revealed), f"* did not reveal the footer: {revealed}")
+    shown = phone.rows_after(n, "revealed")
+    check("agents" in shown[-1] and any("shift+tab" in r for r in shown[-3:]), f"the footer is not the last row: {shown}")
+    check(not any("\u2500" in r or "----" in r for r in shown), f"a rule is shown when revealed: {shown}")
     phone.shot("revealed")
+    n = len(phone.trace())
+    for _ in range(6):
+        phone.click("k2")
+    up = phone.rows_after(n, "scrolled up when revealed")
+    check(all(any(c in r for r in shown + up) for c in CHROME[1:]), f"summary and notice not reachable: {shown + up}")
+    n = len(phone.trace())
     phone.click("pound")
     phone.expect(r"^Info on", "overlay")
     time.sleep(0.5)
@@ -516,9 +539,26 @@ def f20(run, name, profile):
     time.sleep(0.5)
     phone.shot("overlay")
     phone.menu(1)  # Back
-    mark = "\\*" if profile == "midp1" else "\u2733"
-    phone.expect(r"^Panes: \* " + mark + r" build \(bash\)\|", "the program's title, spelt for the phone")
+    phone.expect(r"^Panes: \* build \(bash\)\|", "the program's title, its mark dropped")
     phone.shot("titled")
+
+
+@test("F21", "Auto picks the Claude Code lens by the program: no rules needed, the empty box is hidden until *", "e2e-ui")
+def f21(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="claude-empty", says_claude=True)
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    rows = phone.rows_after(0, "drawn")
+    check(rows[-1].endswith("pong"), f"the last transcript row is not at the bottom: {rows}")
+    check(not any(r.strip() in ("\u276f", ">") for r in rows), f"the empty box is shown: {rows}")
+    check(not any(c in r for r in rows for c in CHROME), f"chrome shown: {rows}")
+    phone.shot("auto-claude")
+    n = len(phone.trace())
+    phone.click("star")
+    shown = phone.rows_after(n, "revealed")
+    check("agents" in shown[-1] and any(r.strip() in ("\u276f", ">") for r in shown), f"* did not show box and footer: {shown}")
+    phone.shot("revealed")
 
 
 @test("J14", "A new install file replaces the saved token; the same one is taken once", "e2e")

@@ -54,6 +54,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final List panes = new List("muxway", List.IMPLICIT);
     private final Vector addresses = new Vector();
     private final Vector names = new Vector();
+    private final Vector commands = new Vector();
     private final Vector writable = new Vector();
     private PaneView view;
     private final TextBox reply = new TextBox("Reply", "", 500, TextField.ANY);
@@ -291,6 +292,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view.address = address;
         view.title = address.substring(address.indexOf('/') + 1);
         view.name = (String) names.elementAt(i);
+        view.command = (String) commands.elementAt(i);
         view.writable = canWrite;
         view.cols = prefs.width;
         view.lenses = LENSES;
@@ -456,6 +458,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         addresses.removeAllElements();
         names.removeAllElements();
+        commands.removeAllElements();
         writable.removeAllElements();
         // Hosts are named in the list only when there is more than one.
         String host = null;
@@ -482,6 +485,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             panes.append(label, null);
             addresses.addElement(f[0]);
             names.addElement(name);
+            commands.addElement(f[2].trim());
             writable.addElement(new Boolean(w));
             shown.append(label).append('\n');
         }
