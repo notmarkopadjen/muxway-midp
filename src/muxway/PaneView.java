@@ -11,7 +11,9 @@ import javax.microedition.lcdui.Image;
  * Title and scroll position are an overlay shown on #. The size is taken
  * from the first full paint, because Canvas.getWidth binds to a class MIDP
  * 1.0 phones do not have it on. Rows arrive on the network thread and are
- * drawn on the phone's, so shaping and scrolling hold the view's lock.
+ * drawn on the phone's, so shaping and scrolling hold the view's lock,
+ * and nothing asks for a repaint while holding it: on a real phone
+ * repaint() takes the display's own lock, the one paint() runs under.
  */
 final class PaneView extends Canvas {
     static final int ENTER = 1, REPLY = 2, KEYS = 3;
@@ -63,17 +65,19 @@ final class PaneView extends Canvas {
         return width > 0 && (cols > 0 || widths != null);
     }
 
-    synchronized void setText(String text) {
+    void setText(String text) {
         String[] all = Text.split(text, '\n');
         int n = all.length;
         while (n > 0 && all[n - 1].length() == 0) {
             n--;
         }
-        raw = new String[n];
-        System.arraycopy(all, 0, raw, 0, n);
-        offset = 0;
         Trace.show(title + ": " + text);
-        shape();
+        synchronized (this) {
+            raw = new String[n];
+            System.arraycopy(all, 0, raw, 0, n);
+            offset = 0;
+            shape();
+        }
         show();
     }
 
@@ -84,15 +88,19 @@ final class PaneView extends Canvas {
     }
 
     /** Changes the view (see mode) and redraws. */
-    synchronized void setMode(int m) {
-        mode = m;
-        shape();
+    void setMode(int m) {
+        synchronized (this) {
+            mode = m;
+            shape();
+        }
         show();
     }
 
-    private synchronized void toggleReveal() {
-        reveal = !reveal;
-        shape();
+    private void toggleReveal() {
+        synchronized (this) {
+            reveal = !reveal;
+            shape();
+        }
         show();
     }
 
@@ -267,11 +275,14 @@ final class PaneView extends Canvas {
         }
     }
 
-    private synchronized void scroll(int by) {
-        int next = Math.max(0, Math.min(offset + by, Math.max(0, body.length - bodyRows())));
-        if (next != offset) {
+    private void scroll(int by) {
+        synchronized (this) {
+            int next = Math.max(0, Math.min(offset + by, Math.max(0, body.length - bodyRows())));
+            if (next == offset) {
+                return;
+            }
             offset = next;
-            show();
         }
+        show();
     }
 }

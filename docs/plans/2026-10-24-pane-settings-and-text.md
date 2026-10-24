@@ -186,6 +186,12 @@ when `charset` is asked for, so the fixture stays one file.
     the decoder, reads anything that is not well-formed UTF-8 as Latin-1
     and survives any decoder failure the same way (U21, S08's fourth
     lie). The relay now passes the hub's charset through as well.
+  - Found on the phone (0.3.1): the pane froze with the wait bar. The
+    network thread held the view's lock while asking for a repaint; on
+    the phone `repaint()` takes the display's lock, which the paint
+    thread holds while it waits for the view's lock in `visible()`. The
+    emulator's repaint is purely asynchronous, so no test saw it. 0.3.2
+    changes state under the lock and repaints outside it.
 - [x] Security rules (AGENTS.md section 2) hold: one fixed query value,
       bounded pane records from hub-listed addresses, a decoder picked from
       two the app always had
