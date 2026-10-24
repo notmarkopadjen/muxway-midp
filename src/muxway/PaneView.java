@@ -16,7 +16,7 @@ import javax.microedition.lcdui.Image;
  * repaint() takes the display's own lock, the one paint() runs under.
  */
 final class PaneView extends Canvas {
-    static final int ENTER = 1, REPLY = 2, KEYS = 3;
+    static final int ENTER = 1, REPLY = 2, KEYS = 3, REFRESH = 4;
 
     // The green call key on Nokia phones; it sends Enter.
     private static final int SEND_KEY = -10;
@@ -216,7 +216,7 @@ final class PaneView extends Canvas {
             bar(g, y0, (writable ? "> " : "  ") + (name.length() > 0 ? name : title), null);
             int last = body.length - offset;
             int first = Math.max(0, last - bodyRows());
-            bar(g, y0 + (n - 1) * lh, (first + 1) + "-" + last + "/" + body.length, "2/8 5 0 # *");
+            bar(g, y0 + (n - 1) * lh, (first + 1) + "-" + last + "/" + body.length, "1 2/8 5 0 # *");
         }
         if (frame >= 0 && frames != null && frames.length > 0) {
             g.drawImage(frames[frame % frames.length], w, 0, Graphics.TOP | Graphics.RIGHT);
@@ -237,6 +237,9 @@ final class PaneView extends Canvas {
 
     protected void keyPressed(int key) {
         switch (key) {
+        case KEY_NUM1:
+            app.shortcut(REFRESH);
+            return;
         case KEY_NUM2:
             scroll(1);
             return;

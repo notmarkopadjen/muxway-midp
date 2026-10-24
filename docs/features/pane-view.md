@@ -37,6 +37,7 @@ characters.
 
 | Key | Does |
 |---|---|
+| `1` | refresh the pane |
 | `2` / `8`, or the joystick | scroll one row up / down; hold to repeat |
 | `5` | Reply (writable panes) |
 | `0` | Keys (writable panes) |

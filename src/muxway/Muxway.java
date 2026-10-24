@@ -45,7 +45,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final ChoiceGroup textChoice = new ChoiceGroup("Text", ChoiceGroup.EXCLUSIVE,
         new String[] {"Unicode", "Latin-1", "ASCII"}, null);
     private final StringItem help = new StringItem("Keys",
-        "2/8 scroll, 5 reply, 0 keys, # title and position, * hidden rows, call key Enter");
+        "1 refresh, 2/8 scroll, 5 reply, 0 keys, # title and position, * hidden rows, call key Enter");
 
     // One pane's own view, picked from a list reached from its menu; made
     // afresh for each pane, since MIDP 1.0 cannot retitle a screen.
@@ -232,6 +232,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         } else if (what == PaneView.KEYS) {
             Trace.show("Keys");
             display.setCurrent(keys);
+        } else if (what == PaneView.REFRESH) {
+            start(REFRESH, null);
         }
     }
 

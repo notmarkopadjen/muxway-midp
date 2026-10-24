@@ -254,7 +254,7 @@ class Relay:
 
 # Where the emulator's skin buttons are, in window coordinates, and where to
 # click to give a text box focus, per device. The keypad is the same on both.
-KEYPAD = {"k2": (116, 363), "k5": (116, 399), "k8": (114, 432), "k0": (114, 467), "star": (45, 464),
+KEYPAD = {"k1": (45, 363), "k2": (116, 363), "k5": (116, 399), "k8": (114, 432), "k0": (114, 467), "star": (45, 464),
           "pound": (183, 463)}
 SKINS = {
     "default": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (110, 150), **KEYPAD},

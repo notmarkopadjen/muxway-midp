@@ -380,7 +380,7 @@ def f14(run, name, profile):
     phone.shot("info")
 
 
-@test("F15", "Keypad: 5 opens Reply, 0 opens Keys, 8 scrolls back", "e2e-ui")
+@test("F15", "Keypad: 5 opens Reply, 0 opens Keys, 8 scrolls back, 1 refreshes", "e2e-ui")
 def f15(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile)
     open_pane(phone)
@@ -405,6 +405,11 @@ def f15(run, name, profile):
     phone.click("k8")
     down = phone.rows_after(n, "scrolled down")
     check(down == rows, f"8 did not scroll back: {down}")
+    reads = lambda: len([r for r in relay.requests if r["path"].startswith("/v1/panes/" + HOST)])
+    before = reads()
+    phone.click("k1")
+    wait_for("1 read the pane again", lambda: reads() > before)
+    phone.shot("refreshed-by-1")
 
 
 @test("F16", "Keys: Shift-Tab reaches the pane", "e2e-ui")
