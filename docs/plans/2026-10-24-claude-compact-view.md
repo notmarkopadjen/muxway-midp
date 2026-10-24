@@ -150,4 +150,9 @@ layout), `docs/features/pane-view.md` (list label), core
 
 ## Test run
 
-To be recorded.
+Run `20261024-092857-696e5d7` at commit `696e5d7`: passed, 132 tests,
+recorded as [issue #9](https://github.com/notmarkopadjen/muxway-midp/issues/9).
+The run before it, at `760ecab`, failed S09 on a stale expectation (the
+forged title's leading star is dropped as decoration now) and is
+recorded as issue #8. The hub side, the fold table, ran in the core
+repository as issue #39 there.
