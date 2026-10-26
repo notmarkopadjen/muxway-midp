@@ -76,6 +76,12 @@ corners, keyboard first, information-dense. No gradients, no rounded SaaS
 cards, no stock illustrations. On tiny screens (feature phones, glasses)
 retro is native: respect the device, do not imitate a bigger one.
 
+The clients are one product. This client follows the core's
+[`docs/ui-guideline.md`](https://github.com/notmarkopadjen/muxway/blob/main/docs/ui-guideline.md)
+(naming, the lens, the pane list, the pane view, which action each key
+triggers) as far as a 96x65 screen and a keypad allow; where it cannot,
+`docs/features/` says what it does instead.
+
 ## 5. How work is done
 
 Every feature follows `docs/templates/feature.md`:
@@ -104,11 +110,12 @@ limits; and that no secret appears in any response or log.
 
 - End-to-end tests run the real binaries against a throwaway tmux server and
   a test hub, never against a real machine.
-- Browser and UI tests use Playwright and plain `.html` fixture pages where
-  a page is needed, so a test can be opened and replayed by hand.
+- UI tests drive the real JAR in the microemulator on a headless display
+  (Xvfb), with xdotool for clicks and keys and ImageMagick for screenshots;
+  the app's trace of what reaches the screen is what a test reads. There is
+  no browser and no Playwright in this repository.
 - Every run writes a run directory: a summary, the full log of every
-  component, and for UI tests a screenshot (and a trace) at each step and on
-  failure.
+  component, and for UI tests a screenshot at each step and on failure.
 - Every run is recorded as a test run: a GitHub issue labelled `test-run` (see `docs/testing.md`), with its
   date, commit, environment, result per test, and links to the logs and
   screenshots.
@@ -131,3 +138,15 @@ supports.
   feature covers this path explicitly.
 - Every API call made by the 1.0 build is checked against the MIDP 1.0
   member list after each build.
+
+Build and test (JDK 8 at `/usr/lib/jvm/java-8-openjdk-amd64` or
+`JAVA_HOME`; `curl`, `unzip`, Python 3; for the tests also tmux, Xvfb,
+xdotool, ImageMagick and Go):
+
+```sh
+python3 tools/draw.py                   # only after changing the pictures
+scripts/build.sh                        # out/muxway.jar (MIDP 2.0), out/muxway1.jar (MIDP 1.0), JADs
+scripts/check-midp1.sh out/muxway1.jar  # run by build.sh; what the 1.0 JAR may reference
+MUXWAY_CORE=../muxway scripts/e2e.sh    # the whole suite on both builds, see docs/testing.md
+scripts/e2e.sh S04 F08                  # chosen tests
+```

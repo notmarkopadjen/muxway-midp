@@ -216,5 +216,7 @@ instead of navigating back.
 33 tests: 10 unit, 11 end-to-end on each build (MIDP 1.0 on a 96x65
 screen, MIDP 2.0 on the default one), and the final search of every log
 for tokens and keys. All passing in two consecutive full runs; 78
-screenshots and an HTML report per run. CI skips the suite until it can
-read the core repository.
+screenshots and an HTML report per run. The final run,
+`20261023-202719-c90da3e` at commit `c90da3e`, is recorded as
+[issue #1](https://github.com/notmarkopadjen/muxway-midp/issues/1). CI
+skips the suite until it can read the core repository.

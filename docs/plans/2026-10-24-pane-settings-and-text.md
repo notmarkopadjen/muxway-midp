@@ -92,7 +92,7 @@ sequenceDiagram
     participant P as Phone (MIDP 1.0)
     participant H as Hub
     P->>H: GET panes/{address}?lines=40&width=400&charset=latin1
-    H-->>P: text/plain; charset=iso-8859-1, rules as ---, ❯ as >
+    H-->>P: text/plain in Latin-1, rules as ---, ❯ as >
     P->>P: decode Latin-1, lens sees the rules, pins the box
 ```
 

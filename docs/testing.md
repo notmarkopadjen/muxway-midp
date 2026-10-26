@@ -17,7 +17,7 @@ environment is read.
 flowchart LR
     S[start run] --> E[throwaway tmux, hub, agent]
     E --> T[tests: security first, then features, then UI]
-    T --> D[run directory: summary, logs, screenshots, traces]
+    T --> D[run directory: summary, logs, screenshots]
     D --> R[record the run]
 ```
 
@@ -27,14 +27,14 @@ Every run writes `test-runs/<timestamp>-<commit>/` (ignored by git):
 |---|---|
 | `summary.md` | date, commit, environment, totals, result per test |
 | `results.xml` | JUnit XML, for tools |
-| `logs/<component>.log` | full log of hub, agent, tmux and test runner |
-| `screens/<test>/<step>.png` | UI tests: a screenshot per step and on failure |
-| `traces/<test>.zip` | UI tests: Playwright trace, opened with `npx playwright show-trace` |
+| `logs/<test>/<component>.log` | full log of hub, agent, relay and emulator per test |
+| `screens/<test>/<build>/<step>.png` | UI tests: a screenshot per step and on failure |
 | `report/index.html` | HTML report of the run |
 
-UI tests drive the clients with Playwright. Where a test needs a page of its
-own, it is a plain `.html` file under `tests/e2e/pages/` that can be opened
-and replayed by hand.
+UI tests drive the app itself in the microemulator on a headless X display
+(Xvfb), with clicks and key presses sent by xdotool and screenshots taken by
+ImageMagick; the app's own trace of what reaches the screen is what the
+tests read. There is no browser and no Playwright here.
 
 ## Recording runs
 
@@ -44,7 +44,7 @@ run**: a GitHub issue labelled `test-run`.
 - Title: `Run <run id>: <passed|failed> @ <commit>`, labels `test-run` and
   `run:passed` or `run:failed`.
 - Body: result, commit, totals, a link to the workflow run whose artifacts
-  hold the logs, screenshots and traces, then the run's `summary.md`.
+  hold the logs and screenshots, then the run's `summary.md`.
 - A green run is closed at once; a red one stays open until the fix lands
   and links back to it. The issue list filtered by `label:test-run` is the
   run history.
@@ -63,11 +63,52 @@ sequenceDiagram
     participant E as scripts/e2e.sh
     participant GH as GitHub
     CI->>E: run suite
-    E-->>CI: test-runs/<id>/ (summary, results.xml, logs, screens, traces)
+    E-->>CI: test-runs/id/ (summary, results.xml, logs, screens)
     CI->>GH: upload run directory as artifact
     CI->>GH: check run from results.xml
-    CI->>GH: issue "Run <id>: result @ commit" (closed if passed)
+    CI->>GH: issue "Run id: result @ commit" (closed if passed)
 ```
+
+## This repository
+
+`scripts/e2e.sh` builds both apps with `scripts/build.sh`, builds the hub
+and agent from the core checkout (`MUXWAY_CORE`, default `../muxway`),
+fetches the microemulator once into `lib/` (verified by SHA-256), and runs
+`tests/e2e/run.py`, which runs every test on both builds: `midp1`
+(MIDP 1.0 on a 96x65 monochrome skin, `tests/device/n96x65`) and `midp2`
+(MIDP 2.0 on the emulator's default screen). `scripts/e2e.sh S04 F08` runs
+chosen tests.
+
+| Suite | Where | What |
+|---|---|---|
+| build check | shell | `scripts/check-midp1.sh`: every Java ME member the MIDP 1.0 JAR references exists in MIDP 1.0, and the JAR is under 30 KiB; the result goes to `build-check.txt` |
+| unit (`U`) | JVM | `tests/unit/UnitTest.java`, plain Java SE: text filters, wrapping, labels, the Claude Code lens, JSON bodies, encodings, URL and address grammar |
+| security (`S`) | emulator | first in the order: a revoked token, the token in headers only and never on screen, read-only panes, a hostile hub (1 MiB answers, bad UTF-8, control characters, forged titles, a lying charset or program), and last a search of every log for the tokens and keys of the run |
+| features (`F`, `J`) | emulator | list, open, reply, keys, auto refresh, outages, the keypad, lenses, per-pane views, the Text setting, pane names, and the install file |
+
+Each emulator test starts its own hub, agent and tmux server on loopback
+with throwaway tokens, and a relay (`tests/e2e/harness.py`) that records
+every request and can misbehave on purpose: forge titles, lie about the
+charset or the mode, answer with a megabyte. The phone is the real JAR in
+the microemulator with `Muxway-Trace: 1` in its JAD, so the test reads what
+the app puts on screen from the emulator's standard output.
+
+```mermaid
+flowchart LR
+    E[scripts/e2e.sh] --> B[scripts/build.sh: both JARs, check-midp1.sh]
+    B --> G[go build the hub from MUXWAY_CORE]
+    G --> R[tests/e2e/run.py]
+    R --> U[unit tests on the JVM]
+    R --> X[Xvfb display]
+    X --> M[microemulator: muxway1.jar, then muxway.jar]
+    M --> D[xdotool clicks and keys, ImageMagick screenshots]
+    D --> O[results.xml, summary.md, report/index.html]
+```
+
+The run directory holds `logs/<test>/` with `hub.log`, `agent.log`,
+`relay.log` and `emulator-<build>.log` per test, `screens/<test>/<build>/`
+with a screenshot per step, `build-check.txt`, `environment.txt`, and the
+log search as the last test (`S99`) in `results.xml`.
 
 ### The suite's contract
 
