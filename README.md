@@ -7,12 +7,20 @@ your tmux panes on a MIDP 1.0 or 2.0 phone. A 2002 Nokia reads Claude
 Code and answers it.
 
 <p>
+<img src="docs/images/photo-claude.jpg" alt="A Nokia 6310i held in front of a laptop, Claude Code through the lens on its screen" width="226">
+<img src="docs/images/photo-panes.jpg" alt="The same phone showing the pane list" width="226">
+<img src="docs/images/photo-reply.jpg" alt="The same phone on the reply screen" width="226">
+</p>
+
+> Works on a Nokia 6310i: list panes, read one, reply, send keys.
+
+The screens as the test suite's emulator draws them, pixel for pixel:
+
+<p>
 <img src="docs/images/claude.png" alt="Claude Code through the lens on a 96 by 65 pixel screen" width="226">
 <img src="docs/images/panes.png" alt="The pane list" width="226">
 <img src="docs/images/reply.png" alt="The reply screen" width="226">
 </p>
-
-> Works on a Nokia 6310i: list panes, read one, reply, send keys.
 
 ## What it does
 
@@ -84,7 +92,8 @@ the app in the microemulator on a headless display (the MIDP 1.0 build on a
 96x65 screen). It drives the app with clicks and key presses and writes
 `test-runs/<id>/` with a summary, JUnit results, logs, a screenshot per step
 and `report/index.html`. Needs tmux, Xvfb, xdotool, ImageMagick, Go,
-Python 3 and JDK 8. The screenshots above come from it.
+Python 3 and JDK 8. The emulator screenshots above come from it; the
+photos are of a Nokia 6310i running the MIDP 1.0 build.
 
 Contributors and AI agents: read [AGENTS.md](AGENTS.md) first.
 Security issues: see [SECURITY.md](SECURITY.md).

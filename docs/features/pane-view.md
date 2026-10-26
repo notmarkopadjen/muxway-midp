@@ -27,6 +27,9 @@ flowchart LR
 
 ## The screen
 
+<img src="../images/photo-pane.jpg" alt="A Nokia 6310i showing a pane's text wrapped over the whole screen" width="226">
+<img src="../images/photo-keys.jpg" alt="The same phone on the Keys menu: Enter, Ctrl-C, Escape" width="226">
+
 The pane fills the whole screen. There is no title bar and no scroll
 marker: the pane's rows are drawn in the phone's small font from the left
 edge, bottom-aligned, so the last row is always a full one and the spare

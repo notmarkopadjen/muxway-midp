@@ -1,5 +1,7 @@
 # Installing on a phone
 
+<img src="../images/photo-install.jpg" alt="A Nokia 6310i with muxway in its Applications menu" width="226">
+
 ## From the phone's browser
 
 Open the `.jad` URL in the phone's browser; the phone fetches the JAR and
