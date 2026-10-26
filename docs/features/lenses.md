@@ -1,8 +1,9 @@
 # Lenses
 
-A lens reshapes the rows of one particular program for a tiny screen. It
-is the client's plugin mechanism: one class, one method, nothing else in
-the app knows what it looks for. The first lens is for Claude Code.
+A lens reshapes the rows of one particular program, an AI coding agent
+as a rule, for a tiny screen. It is the client's plugin mechanism: one
+class, one method, nothing else in the app knows what it looks for. The
+first lens is for Claude Code, the one tested so far.
 
 ## How a lens works
 

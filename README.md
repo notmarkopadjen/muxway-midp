@@ -29,6 +29,9 @@ little, and does it on purpose:
 - **The Claude Code lens**: the first [lens](docs/features/lenses.md)
   reshapes Claude Code's screen for the phone, hiding the chrome and
   keeping the conversation and the prompt; `*` reveals everything.
+  Only Claude Code has been tested so far; another AI coding agent
+  needs a lens for its screen, and its own hooks calling `muxway
+  notify` on the host.
 - **Keypad first**: `5` replies, `0` opens the keys, `8` scrolls back,
   `1` refreshes. See [the pane view](docs/features/pane-view.md).
 
@@ -47,6 +50,13 @@ The other clients, and the hub: [muxway](https://github.com/notmarkopadjen/muxwa
 (web client, protocol),
 [muxway-android](https://github.com/notmarkopadjen/muxway-android),
 [muxway-glasses-even](https://github.com/notmarkopadjen/muxway-glasses-even).
+
+## Download
+
+The latest JARs and JADs are on the
+[Releases page](https://github.com/notmarkopadjen/muxway-midp/releases/latest):
+`muxway.jar` for MIDP 2.0 phones, `muxway1.jar` for MIDP 1.0, installed
+the way [Install](docs/features/install.md) says.
 
 ## Build
 
