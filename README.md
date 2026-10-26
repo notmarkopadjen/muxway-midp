@@ -78,3 +78,5 @@ Python 3 and JDK 8. The screenshots above come from it.
 
 Contributors and AI agents: read [AGENTS.md](AGENTS.md) first.
 Security issues: see [SECURITY.md](SECURITY.md).
+
+[Apache License 2.0](LICENSE), like the rest of muxway.
