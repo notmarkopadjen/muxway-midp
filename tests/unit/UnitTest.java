@@ -246,6 +246,15 @@ public final class UnitTest {
         eq("json_key", Api.key("C-c"), "{\"key\":\"C-c\"}");
         eq("problem_401", Api.problem(401), "Token refused.");
         eq("problem_503", Api.problem(503), "Host offline.");
+        eq("url_http_and_https", String.valueOf(Text.url("http://relay.example.com:8080/x")) + Text.url("https://hub.example.com"), "truetrue");
+        eq("url_other_schemes_and_marks", String.valueOf(Text.url("ftp://x")) + Text.url("http://a?b") + Text.url("http://a#b")
+            + Text.url("http://u@a") + Text.url("http://a b") + Text.url(""), "falsefalsefalsefalsefalsefalse");
+        eq("local_loopback_and_private", String.valueOf(Text.local("http://127.0.0.1:8080")) + Text.local("http://localhost/x")
+            + Text.local("http://[::1]:80") + Text.local("http://10.1.2.3") + Text.local("http://172.20.0.1") + Text.local("http://192.168.0.9"), "truetruetruetruetruetrue");
+        eq("local_public_is_not", String.valueOf(Text.local("http://relay.example.com")) + Text.local("http://172.32.0.1") + Text.local("http://192.0.2.10"), "falsefalsefalse");
+        eq("address_grammar", String.valueOf(Text.address("alice-laptop/work/1.0")) + Text.address("box/@logs") + Text.address("h/My_Sess.1/0.2"), "truetruetrue");
+        eq("address_rejects_injection", String.valueOf(Text.address("host/../admin")) + Text.address("host/a?x=1") + Text.address("Host/a/0.0")
+            + Text.address("host") + Text.address("host/") + Text.address("host//a") + Text.address("host/a@b") + Text.address(repeat('h', 33) + "/a/0.0"), "falsefalsefalsefalsefalsefalsefalsefalse");
         System.exit(failed == 0 ? 0 : 1);
     }
 }

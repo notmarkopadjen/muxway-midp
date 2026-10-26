@@ -6,4 +6,4 @@ MIDlet-Description: Your tmux, from anywhere
 MIDlet-Info-URL: https://github.com/notmarkopadjen/muxway-midp
 MicroEdition-Configuration: CLDC-1.1
 MicroEdition-Profile: MIDP-2.0
-MIDlet-Permissions-Opt: javax.microedition.io.Connector.http
+MIDlet-Permissions-Opt: javax.microedition.io.Connector.http, javax.microedition.io.Connector.https

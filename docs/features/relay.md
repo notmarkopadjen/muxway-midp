@@ -6,10 +6,12 @@ plain HTTP from the phone and forwards it to the hub over HTTPS.
 
 ## What a relay must do
 
-- Forward `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/hosts/{host}/tree`,
-  `GET /v1/panes/{address}` and `POST /v1/panes/{address}/input` to the
-  hub, with the headers `X-Muxway-Token`, `Accept`, `Content-Type` and the
-  body. Nothing else: a relay that forwards any path is an open proxy.
+- Forward `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}` and
+  `POST /v1/panes/{address}/input` to the hub, with their query string and
+  the headers `X-Muxway-Token`, `Accept`, `Content-Type` and the body.
+  These are the only paths the app requests (see
+  [the protocol features used](../ARCHITECTURE.md#protocol-features-used)).
+  Nothing else: a relay that forwards any path is an open proxy.
 - Answer only phones you know. The simplest way: a list of the tokens the
   relay will forward; anything else gets `401` from the relay itself.
 - Cap request bodies (16 KiB is the hub's own limit) and answers.
@@ -35,12 +37,15 @@ its active WAP settings):
 The app sends its token in `X-Muxway-Token` because WAP stacks rewrite
 `Authorization: Bearer` into `Basic`; a relay passes that header on as it is.
 
-## Risks to accept
+## Security considerations
 
 Between the phone and the relay everything travels unencrypted, the token
-included: over the mobile network and, with a WAP gateway, through it. Use
-a token per phone, granted only the panes it needs, read-only unless typing
-is the point, and short-lived. Revoke it when the phone is lost.
+included: over the mobile network and, with a WAP gateway, through it (the
+phone, relay, hub diagram in [the architecture page](../ARCHITECTURE.md#where-it-sits)
+shows the two legs). Use a token per phone, granted only the panes it needs,
+read-only unless typing is the point, and short-lived. Revoke it when the
+phone is lost. The app says this once when such a server is saved in
+Settings.
 
 ## Example: a reverse proxy
 
@@ -50,7 +55,7 @@ rules left to the phone side when no WAP gateway is involved:
 
 ```caddyfile
 :8080 {
-	@client path /v1/hosts /v1/panes /v1/hosts/*/tree /v1/panes/*
+	@client path /v1/hosts /v1/panes /v1/panes/*
 	handle @client {
 		reverse_proxy https://hub.example.com {
 			header_up Host hub.example.com

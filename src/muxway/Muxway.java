@@ -129,10 +129,15 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         prefs.load();
         String s = getAppProperty("Muxway-Server");
         String t = getAppProperty("Muxway-Token");
+        boolean badUrl = false;
         if (s != null && t != null && s.trim().length() > 0 && t.trim().length() > 0) {
-            // A new install file replaces what is saved, once; Settings may change it after.
+            // A new install file replaces what is saved, once; Settings may change it
+            // after. The stamp stays when the hub refuses the token, so the same
+            // install file is not taken again.
             String stamp = Integer.toString(t.trim().hashCode());
-            if (!prefs.ready() || !stamp.equals(prefs.installed)) {
+            if (!Text.url(s.trim())) {
+                badUrl = true;
+            } else if (!stamp.equals(prefs.installed)) {
                 prefs.server = s.trim();
                 prefs.token = t.trim();
                 prefs.installed = stamp;
@@ -151,6 +156,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             start(LIST, null);
         } else {
             showSetup();
+            if (badUrl) {
+                alert(BAD_URL, setup);
+            }
         }
     }
 
@@ -237,8 +245,17 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
     }
 
+    private static final String BAD_URL = "Server must start with http:// or https:// and have no ?, # or @.";
+
     private void saveSetup() {
-        prefs.server = trimSlash(server.getString().trim());
+        String s = trimSlash(server.getString().trim());
+        if (s.length() > 0 && !Text.url(s)) {
+            alert(BAD_URL, setup);
+            return;
+        }
+        // Said once per server: plain HTTP past the phone's own network shows the token to the path.
+        boolean open = !s.equals(prefs.server) && s.startsWith("http://") && !Text.local(s);
+        prefs.server = s;
         String t = token.getString().trim();
         if (t.length() > 0) {
             prefs.token = t;
@@ -247,7 +264,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         prefs.refresh = Math.max(0, Math.min(600, Text.toInt(refresh.getString(), 0)));
         prefs.text = textChoice.getSelectedIndex();
         prefs.save();
-        if (prefs.ready()) {
+        if (open) {
+            alert("Unencrypted: the token travels in the clear. Use a relay and a token scoped to this phone (docs/features/relay.md).", setup);
+        } else if (prefs.ready()) {
             start(LIST, null);
         } else {
             alert("Server and token are needed.", setup);
@@ -440,7 +459,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             }
         } catch (Exception e) {
             if (current(mine)) {
-                fail(e.toString());
+                Trace.show("Error: " + e);
+                fail("Something went wrong. Try again.");
             }
         } finally {
             finish(mine);
@@ -477,7 +497,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         StringBuffer shown = new StringBuffer();
         for (int i = 0; i < rows.length; i++) {
             String[] f = Text.split(rows[i], '\t');
-            if (f.length < 3) {
+            if (f.length < 3 || !Text.address(f[0])) {
                 continue;
             }
             // The mark comes from the hub's mode column, never from the title.

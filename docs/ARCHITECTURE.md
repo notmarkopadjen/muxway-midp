@@ -26,7 +26,7 @@ HTTPS. See [the relay page](features/relay.md).
 | `src/muxway/Muxway.java` | the MIDlet: screens, commands, jobs, auto refresh |
 | `src/muxway/PaneView.java` | the pane, drawn on a Canvas over the whole screen |
 | `src/muxway/Lens.java`, `src/muxway/ClaudeCode.java` | lenses: per-program reshaping of a pane's rows ([lenses](features/lenses.md)) |
-| `src/muxway/Api.java` | the four protocol calls, limits, error messages |
+| `src/muxway/Api.java` | the protocol calls, limits, error messages |
 | `src/muxway/Prefs.java` | settings, and each pane's view, in the record store |
 | `src/muxway/Text.java` | string helpers CLDC 1.0 lacks, filters for screen and input |
 | `src/muxway/Trace.java` | test-only record of what reaches the screen |
@@ -106,6 +106,28 @@ sequenceDiagram
   before anything is shown.
 - The token goes in `X-Muxway-Token`: WAP 1.x stacks rewrite
   `Authorization: Bearer` into `Basic`.
+
+## Protocol features used
+
+What a relay has to pass, and all the app ever asks for:
+
+- `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}` and
+  `POST /v1/panes/{address}/input`, under the server URL from Settings
+  plus `/v1`. No other route: no `/v1/me`, no tree, no long-poll or events.
+- Text mode only: `Accept: text/plain`, and the answers are read as
+  `text/plain`.
+- Query parameters: `charset=latin1` or `charset=ascii` on `panes` and on a
+  pane read when the Text setting is not Unicode; `lines=<n>` and
+  `width=400` on a pane read.
+- Headers: `X-Muxway-Token`, `Accept`, `User-Agent`, `If-None-Match` on
+  auto refresh (and `ETag` from the answer), `Content-Type:
+  application/json` and `Content-Length` on input.
+- Input is `{"text": "..."}` or `{"key": "<name>"}` with one of the
+  protocol's named keys; control characters never leave the phone.
+- Pane addresses come from the hub's list and are used only when they
+  follow the protocol's grammar (`host/session/window.pane` or
+  `host/@alias`); any other row is skipped. The server URL must be
+  `http://` or `https://` with no `?`, `#`, `@` or whitespace.
 
 ## Builds
 

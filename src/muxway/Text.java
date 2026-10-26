@@ -137,6 +137,61 @@ final class Text {
         return true;
     }
 
+    /** A server the app may call: http or https, a host and maybe a path; nothing a query or a login could hide in. */
+    static boolean url(String s) {
+        if (!s.startsWith("http://") && !s.startsWith("https://")) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c <= ' ' || c == '?' || c == '#' || c == '@') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** True when the server is the phone itself or on a private network (RFC 1918). */
+    static boolean local(String url) {
+        String h = url.substring(url.indexOf("//") + 2);
+        int cut = h.indexOf('/');
+        if (cut >= 0) {
+            h = h.substring(0, cut);
+        }
+        if (h.startsWith("[")) {
+            return h.startsWith("[::1]");
+        }
+        cut = h.indexOf(':');
+        if (cut >= 0) {
+            h = h.substring(0, cut);
+        }
+        if (h.equals("localhost") || h.startsWith("127.") || h.startsWith("10.") || h.startsWith("192.168.")) {
+            return true;
+        }
+        if (h.startsWith("172.")) {
+            int second = toInt(split(h, '.')[1], 0);
+            return second >= 16 && second <= 31;
+        }
+        return false;
+    }
+
+    /** A pane address as the protocol spells it: a host, then session/window.pane or @alias. */
+    static boolean address(String a) {
+        int slash = a.indexOf('/');
+        if (slash < 1 || slash > 32 || slash == a.length() - 1 || a.indexOf("..") >= 0 || a.indexOf("//") >= 0) {
+            return false;
+        }
+        for (int i = 0; i < a.length(); i++) {
+            char c = a.charAt(i);
+            boolean host = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+            boolean rest = i >= slash && ((c >= 'A' && c <= 'Z') || c == '.' || c == '_' || c == '/' || (c == '@' && i == slash + 1));
+            if (!host && !rest) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static int toInt(String s, int fallback) {
         try {
             return Integer.parseInt(s.trim());
