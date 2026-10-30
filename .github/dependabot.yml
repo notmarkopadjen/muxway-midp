@@ -1,0 +1,9 @@
+# The only dependencies a bot can follow are the actions, pinned to commit
+# SHAs. The CLDC/MIDP stubs, ProGuard and the emulator are fetched by the
+# build scripts and verified by SHA-256; bumping them is a reviewed edit.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

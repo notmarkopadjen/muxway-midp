@@ -181,6 +181,8 @@ Both builds run every UI test, the 1.0 build on a 96x65 skin.
   token stays writable, client tests run locally only while the core
   repository is private, auto-refresh starts off.
 - 2026-10-23: the app authenticates with `X-Muxway-Token` only (spike above).
+- 2026-10-30: the core repository is public, so CI runs the suite on every
+  push and pull request; local runs are still recorded the same way.
 
 ## Review
 
