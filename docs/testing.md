@@ -115,9 +115,9 @@ log search as the last test (`S99`) in `results.xml`.
 Each repository provides `scripts/e2e.sh`. It builds the throwaway test
 environment, runs the suite, writes one run directory under `test-runs/`
 with at least `summary.md` and `results.xml` (JUnit), and exits non-zero if
-any test failed. Until a repository has one, CI skips the test steps.
+any test failed.
 
-Considered and not used: an Allure report on GitHub Pages (needs a paid plan
-while private; may be added for trends once public), and committing runs to
+Considered and not used: an Allure report on GitHub Pages (may be added
+for trends), and committing runs to
 the repository (logs and screenshots would risk leaking private data into
 permanent history).
