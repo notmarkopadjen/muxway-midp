@@ -199,9 +199,9 @@ final class Api {
         return "Unexpected answer " + status + ".";
     }
 
-    /** JSON string body for the input call. */
-    static String text(String s) {
-        StringBuffer out = new StringBuffer("{\"text\":\"");
+    /** JSON body of one string under key: the input call's text, the answer call's choice. */
+    static String json(String key, String s) {
+        StringBuffer out = new StringBuffer("{\"" + key + "\":\"");
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c == '"' || c == '\\') {

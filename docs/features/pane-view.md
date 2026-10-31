@@ -48,6 +48,7 @@ characters.
 | `2` / `8`, or the joystick | scroll one row up / down; hold to repeat |
 | `3` | Image (writable panes, MIDP 2.0 build): see [images](images.md) |
 | `5` | Reply (writable panes) |
+| `9` | Inbox (MIDP 2.0 build): see [the inbox](inbox.md) |
 | `0` | Keys (writable panes) |
 | `#` | show or hide the title and scroll position |
 | `*` | show or hide what a [lens](lenses.md) hid (footer, status) |

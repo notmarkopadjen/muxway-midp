@@ -87,8 +87,8 @@ chosen tests.
 |---|---|---|
 | build check | shell | `scripts/check-midp1.sh`: every Java ME member the MIDP 1.0 JAR references exists in MIDP 1.0, and the JAR is under 30 KiB; the result goes to `build-check.txt` |
 | unit (`U`) | JVM | `tests/unit/UnitTest.java`, plain Java SE: text filters, wrapping, labels, the Claude Code lens, JSON bodies, encodings, URL and address grammar |
-| security (`S`) | emulator | first in the order: a revoked token, the token in headers only and never on screen, read-only panes, a hostile hub (1 MiB answers, bad UTF-8, control characters, forged titles, a lying charset or program), and last a search of every log for the tokens and keys of the run |
-| features (`F`, `J`) | emulator | list, open, reply, keys, auto refresh, outages, the keypad, lenses, per-pane views, the Text setting, pane names, and the install file |
+| security (`S`) | emulator | first in the order: a revoked token, the token in headers only and never on screen, read-only panes, a hostile hub (1 MiB answers, bad UTF-8, control characters, forged titles, a lying charset or program, forged inbox choices), an answer refused for a read-only token, the paths the app requests against the relay's list, and last a search of every log for the tokens and keys of the run |
+| features (`F`, `J`) | emulator | list, open, reply, keys, auto refresh, outages, the keypad, lenses, per-pane views, the Text setting, pane names, the install file, the kind marks, the inbox and answers |
 
 Each emulator test starts its own hub, agent and tmux server on loopback
 with throwaway tokens, and a relay (`tests/e2e/harness.py`) that records

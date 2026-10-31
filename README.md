@@ -37,7 +37,8 @@ The screen is 96 by 65 pixels and the network is GPRS, so the app does
 little, and does it on purpose:
 
 - **List** every pane the token may see, named by what runs in it; `*`
-  marks the ones you may type into.
+  marks the ones you may type into, and `?` `!` `z` `v` after it what a
+  pane waits for: a question, a permission, idle, done.
 - **Read** a pane, wrapped to the whole screen, refreshed on a timer or
   with a key; the phone asks the hub for Latin-1 so a phone of that age
   can draw it.
@@ -55,6 +56,10 @@ little, and does it on purpose:
   camera or picks one from the phone, sends it to the pane's host and
   puts its path in the reply for the agent to read. See
   [images](docs/features/images.md).
+- **The inbox** (MIDP 2.0 build): what waits for you across hosts,
+  oldest first, from the list's menu or `9`; a question asked with fixed
+  choices (`muxway ask`) is answered from it with a pick, nothing typed.
+  See [the inbox](docs/features/inbox.md).
 
 Phones of that age cannot do current HTTPS, so the app talks to a hub
 through a small [relay](docs/features/relay.md) that terminates TLS, with
@@ -65,6 +70,7 @@ under 30 KiB.
 - [The pane view and its keypad](docs/features/pane-view.md)
 - [Lenses, and the Claude Code lens](docs/features/lenses.md)
 - [Reply with an image](docs/features/images.md)
+- [The inbox, and answers to a question](docs/features/inbox.md)
 - [Running a relay](docs/features/relay.md)
 - [Architecture](docs/ARCHITECTURE.md)
 

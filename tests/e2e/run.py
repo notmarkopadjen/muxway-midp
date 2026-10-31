@@ -124,7 +124,7 @@ def s02(run, name, profile):
 def s03(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile)
     phone.expect(r"^Panes: ", "pane list")
-    phone.menu(0)  # Settings
+    phone.pick_list("Settings")
     phone.expect(r"^Settings: ", "settings")
     phone.shot("settings")
     check(all(tok not in line and tok[4:20] not in line for line in phone.trace()), "token shown on screen")
@@ -763,6 +763,165 @@ def f25(run, name, profile):
     time.sleep(2)
     check(not any(l.startswith("Image:") for l in phone.trace()), "Image opened on the MIDP 1.0 build")
     check(not files_requests(relay), "a files request from the MIDP 1.0 build")
+
+
+# --- the inbox and answers ---------------------------------------------------------
+
+ALLOWED = re.compile(r"^/v1/(hosts|panes|inbox)(\?[^/]*)?$|^/v1/panes/[^/?]+/[^/?]+/[^/?]+(/(input|answer|files))?(\?[^/]*)?$")
+
+
+def asks(core):
+    core.ask("deploy?", ["yes", "no"])
+    wait_for("the ask on the hub", lambda: core.command() != "bash", 10)
+    time.sleep(1.2)  # the hub lists from a one-second cache
+
+
+def inbox_rows(phone):
+    """The rows of the inbox as last drawn."""
+    lists = [l for l in phone.trace() if l.startswith("Inbox: ")]
+    check(lists, "no inbox drawn")
+    return [e for e in lists[-1][7:].split("|") if e]
+
+
+@test("S16", "Read-only token: the inbox shows the question, the answer is refused by the hub, the ask still waits",
+      "e2e-security", profiles=("midp2",))
+def s16(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, write=None, before=asks)
+    phone.expect(r"^Panes:  \?test-pane \(muxway\)", "a question, no star")
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: \? test-pane \(muxway\): deploy\?", "the inbox row")
+    phone.shot("inbox")
+    phone.click("select")
+    phone.expect(r"^Answer: yes\|no\|", "the choices")
+    phone.shot("choices")
+    phone.click("select")  # yes
+    phone.expect(r"^Alert: Read only", "the hub's refusal")
+    phone.shot("refused")
+    check(not re.search(r"^EXIT=\d", core.pane(), re.M), "the ask ended")
+    check(core.waiting(tok), "the question left the inbox")
+
+
+@test("S18", "A relay that forges inbox choices: nine of them, one too long, one with a control character",
+      "e2e-security", profiles=("midp2",))
+def s18(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-inbox")
+    phone.expect(r"^Panes: ", "pane list")
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: \? test-pane \(bash\): pick one", "the forged row")
+    phone.click("select")
+    answer = phone.expect(r"^Answer: ", "the choices")
+    shown = [e for e in answer[8:].split("|") if e]
+    check(len(shown) == 8, f"{len(shown)} choices offered: {shown}")
+    check(shown[0] == "x" * 40, f"the long choice is not cut: {shown}")
+    check(shown[1] == "badctl", f"control character kept: {shown}")
+    phone.shot("capped")
+
+
+@test("S19", "The app requests only the paths a relay forwards, the inbox and an answer included",
+      "e2e-security", profiles=("midp2",))
+def s19(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=asks)
+    phone.expect(r"^Panes: \*\?test-pane", "pane list")
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: \? test-pane", "inbox")
+    phone.click("select")
+    phone.expect(r"^Answer: yes", "choices")
+    phone.click("select")
+    phone.expect(r"^Answered 204", "answered")
+    wait_for("the ask printed the answer", lambda: "EXIT=0" in core.pane())
+    phone.expect(r"^Inbox: $", "the inbox empty again", after=1)
+    phone.menu(0)  # Back
+    phone.expect(r"^Panes: \* test-pane", "back on the list, nothing waits", after=1)
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    paths = [r["path"] for r in relay.requests]
+    bad = [p for p in paths if not ALLOWED.match(p)]
+    check(not bad, f"paths outside the relay's list: {bad}")
+    check(any(p.startswith("/v1/inbox") for p in paths) and any(p.endswith("/answer") for p in paths),
+          f"inbox or answer never requested: {paths}")
+
+
+@test("F24", "A pane that waits shows what for after its mark; working clears it", "e2e-ui")
+def f24(run, name, profile):
+    def question(core):
+        core.notify("question", "deploy?")
+        time.sleep(1.2)
+    core, relay, phone, tok = setup(run, name, profile, before=question)
+    phone.expect(r"^Panes: \*\?test-pane \(bash\)", "the question mark")
+    phone.shot("question")
+    core.notify("permission", "run it?")
+    time.sleep(1.2)
+    phone.click("right")  # Refresh
+    phone.expect(r"^Panes: \*!test-pane \(bash\)", "the permission mark", after=1)
+    core.notify("working")
+    time.sleep(1.2)
+    phone.click("right")
+    phone.expect(r"^Panes: \* test-pane \(bash\)", "cleared", after=2)
+    phone.shot("cleared")
+
+
+@test("F26", "The inbox lists what waits, oldest first; a row without choices opens its pane", "e2e-ui",
+      profiles=("midp2",))
+def f26(run, name, profile):
+    def two(core):
+        second_pane(core, HOST)
+        core.notify("done", "finished", "work:0.1")
+        time.sleep(1.1)
+        core.notify("question", "deploy?")
+        time.sleep(1.2)
+    core, relay, phone, tok = setup(run, name, profile, before=two)
+    phone.expect(r"^Panes: \*\?test-pane", "pane list")
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: v work/0\.1 \(bash\): finished\|\? test-pane \(bash\): deploy\?", "oldest first")
+    phone.shot("inbox")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable", "the oldest pane opened")
+    phone.expect(r"^work/0\.1: ", "content")
+    phone.shot("opened")
+
+
+@test("F27", "A question answered from the inbox reaches the asking process; one that ended says so", "e2e-ui",
+      profiles=("midp2",))
+def f27(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=asks)
+    phone.expect(r"^Panes: \*\?test-pane", "pane list")
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: \? test-pane \(muxway\): deploy\?", "the question")
+    phone.click("select")
+    phone.expect(r"^Answer: yes\|no\|", "the choices")
+    phone.key("Down")
+    phone.click("select")  # no
+    phone.expect(r"^Answered 204", "answered")
+    wait_for("the ask printed the answer", lambda: "EXIT=0" in core.pane())
+    check("\nno\n" in core.pane() or core.pane().endswith("no"), f"the answer is not on the pane: {core.pane()[-80:]}")
+    phone.expect(r"^Inbox: $", "nothing waits", after=1)
+    phone.shot("answered")
+    # A question that ends before the phone answers: the hub says so.
+    core.ask("still there?", ["yes", "no"], timeout="6s")
+    wait_for("the ask on the hub", lambda: core.waiting(tok), 10)
+    phone.click("right")  # Refresh
+    phone.expect(r"^Inbox: \? test-pane \(muxway\): still there\?", "the second question", after=2)
+    phone.click("select")
+    phone.expect(r"^Answer: yes", "its choices", after=2)
+    wait_for("the ask timed out", lambda: "EXIT=2" in core.pane(), 15)
+    phone.click("select")
+    phone.expect(r"^Alert: No question now", "the hub's 409 in words")
+    phone.shot("gone")
+
+
+@test("F28", "Key 9 opens the inbox from a pane on the MIDP 2.0 build; the 1.0 build has no inbox", "e2e-ui")
+def f28(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile)
+    open_pane(phone)
+    phone.click("k9")
+    time.sleep(2)
+    opened = any(l.startswith("Inbox: ") for l in phone.trace())
+    asked = any(r["path"].startswith("/v1/inbox") for r in relay.requests)
+    if profile == "midp2":
+        check(opened and asked, "9 did not open the inbox")
+        phone.shot("inbox-by-9")
+    else:
+        check(not opened and not asked, "the MIDP 1.0 build asked for the inbox")
 
 
 # --- runner -------------------------------------------------------------------------

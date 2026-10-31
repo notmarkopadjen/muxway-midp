@@ -10,6 +10,9 @@ final class Ui {
     // Latin-1 from the hub: these phones have no glyphs for lines and bullets.
     static final int TEXT = 1;
 
+    // The inbox and its answers: a screen, a job and a parser the 30 KiB JAR has no room for.
+    static final boolean INBOX = false;
+
     private Ui() {
     }
 }
