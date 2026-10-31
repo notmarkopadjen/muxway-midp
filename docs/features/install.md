@@ -27,7 +27,9 @@ the app measure the screen) and the refresh interval.
 ## Network permission
 
 The app is not signed (the code-signing roots on these phones expired
-long ago), so the phone asks before it uses the network. On Series 40 set
+long ago), so the phone asks before it uses the network, and the MIDP
+2.0 build asks again before the camera and the phone's files the first
+time Image is used (see [images](images.md)). On Series 40 set
 the app's network access to "Ask first time" to be asked once per start.
 
 ## Updating

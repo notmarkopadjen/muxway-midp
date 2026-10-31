@@ -42,6 +42,7 @@ characters.
 |---|---|
 | `1` | refresh the pane |
 | `2` / `8`, or the joystick | scroll one row up / down; hold to repeat |
+| `3` | Image (writable panes, MIDP 2.0 build): see [images](images.md) |
 | `5` | Reply (writable panes) |
 | `0` | Keys (writable panes) |
 | `#` | show or hide the title and scroll position |
@@ -49,7 +50,8 @@ characters.
 | green call key | send Enter (writable panes) |
 
 The same list is printed at the bottom of Settings. The left soft key menu
-still offers Reply, Keys, Refresh, Auto, Pane, Back and Settings.
+still offers Reply, Keys, Image (MIDP 2.0), Refresh, Auto, Pane, Back and
+Settings.
 
 ## Pane
 
@@ -70,6 +72,7 @@ stateDiagram-v2
     Revealed --> Pane: *
     Pane --> Reply: 5 (writable)
     Pane --> Keys: 0 (writable)
+    Pane --> Image: 3 (writable, MIDP 2.0)
 ```
 
 ## Overlay
@@ -116,8 +119,8 @@ flowchart TD
 ## Security
 
 The view changes how rows are drawn and adds keypad routes to screens that
-exist already. `5` and `0` do nothing on a pane the token cannot write;
-the hub refuses a write anyway if a relay lied about that. No key sends
+exist already. `5`, `0` and `3` do nothing on a pane the token cannot
+write; the hub refuses a write anyway if a relay lied about that. No key sends
 anything but Enter. Wrapping allocates one string per wrapped row, at most
 32 KiB / 8 columns of them (by pixels, one character per row at the
 worst), within the smallest target's heap. The pane records in the

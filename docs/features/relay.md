@@ -6,15 +6,19 @@ plain HTTP from the phone and forwards it to the hub over HTTPS.
 
 ## What a relay must do
 
-- Forward `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}` and
-  `POST /v1/panes/{address}/input` to the hub, with their query string and
-  the headers `X-Muxway-Token`, `Accept`, `Content-Type` and the body.
-  These are the only paths the app requests (see
+- Forward `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}`,
+  `POST /v1/panes/{address}/input`, and for the MIDP 2.0 build `GET` and
+  `POST /v1/panes/{address}/files`, to the hub, with their query string
+  and the headers `X-Muxway-Token`, `Accept`, `Content-Type` and the
+  body. These are the only paths the app requests (see
   [the protocol features used](../ARCHITECTURE.md#protocol-features-used)).
   Nothing else: a relay that forwards any path is an open proxy.
 - Answer only phones you know. The simplest way: a list of the tokens the
   relay will forward; anything else gets `401` from the relay itself.
-- Cap request bodies (16 KiB is the hub's own limit) and answers.
+- Cap request bodies (16 KiB is the hub's own limit) and answers. The
+  `files` path carries an [image](images.md), up to 8 MiB, the hub's
+  limit for it; cap that path alone there, and pass its `Content-Type`
+  (`multipart/form-data` with its boundary) through untouched.
 - Never log the token. Log its id instead, the first 8 hex digits of its
   SHA-256, which is what the hub logs too.
 
@@ -56,6 +60,9 @@ rules left to the phone side when no WAP gateway is involved:
 ```caddyfile
 :8080 {
 	@client path /v1/hosts /v1/panes /v1/panes/*
+	request_body @client {
+		max_size 8MB
+	}
 	handle @client {
 		reverse_proxy https://hub.example.com {
 			header_up Host hub.example.com

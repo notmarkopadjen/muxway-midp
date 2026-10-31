@@ -42,6 +42,10 @@ little, and does it on purpose:
   notify` on the host.
 - **Keypad first**: `5` replies, `0` opens the keys, `8` scrolls back,
   `1` refreshes. See [the pane view](docs/features/pane-view.md).
+- **Reply with a photo** (MIDP 2.0 build): `3` takes one with the
+  camera or picks one from the phone, sends it to the pane's host and
+  puts its path in the reply for the agent to read. See
+  [images](docs/features/images.md).
 
 Phones of that age cannot do current HTTPS, so the app talks to a hub
 through a small [relay](docs/features/relay.md) that terminates TLS, with
@@ -51,6 +55,7 @@ under 30 KiB.
 - [Install](docs/features/install.md)
 - [The pane view and its keypad](docs/features/pane-view.md)
 - [Lenses, and the Claude Code lens](docs/features/lenses.md)
+- [Reply with an image](docs/features/images.md)
 - [Running a relay](docs/features/relay.md)
 - [Architecture](docs/ARCHITECTURE.md)
 
