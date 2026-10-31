@@ -14,6 +14,15 @@ Code and answers it.
 
 > Works on a Nokia 6310i: list panes, read one, reply, send keys.
 
+The MIDP 2.0 build on a Nokia 7310 Supernova: the same screens in
+colour, with Unicode and a camera.
+
+<p>
+<img src="docs/images/photo2-claude.jpg" alt="A Nokia 7310 Supernova held in front of a laptop, Claude Code through the lens on its colour screen" width="226">
+<img src="docs/images/photo2-panes.jpg" alt="The same phone showing the pane list, two Claude Code panes marked writable" width="226">
+<img src="docs/images/photo2-reply.jpg" alt="The same phone on the reply screen" width="226">
+</p>
+
 The screens as the test suite's emulator draws them, pixel for pixel:
 
 <p>
@@ -42,6 +51,10 @@ little, and does it on purpose:
   notify` on the host.
 - **Keypad first**: `5` replies, `0` opens the keys, `8` scrolls back,
   `1` refreshes. See [the pane view](docs/features/pane-view.md).
+- **Reply with a photo** (MIDP 2.0 build): `3` takes one with the
+  camera or picks one from the phone, sends it to the pane's host and
+  puts its path in the reply for the agent to read. See
+  [images](docs/features/images.md).
 
 Phones of that age cannot do current HTTPS, so the app talks to a hub
 through a small [relay](docs/features/relay.md) that terminates TLS, with
@@ -51,6 +64,7 @@ under 30 KiB.
 - [Install](docs/features/install.md)
 - [The pane view and its keypad](docs/features/pane-view.md)
 - [Lenses, and the Claude Code lens](docs/features/lenses.md)
+- [Reply with an image](docs/features/images.md)
 - [Running a relay](docs/features/relay.md)
 - [Architecture](docs/ARCHITECTURE.md)
 
@@ -93,7 +107,8 @@ the app in the microemulator on a headless display (the MIDP 1.0 build on a
 `test-runs/<id>/` with a summary, JUnit results, logs, a screenshot per step
 and `report/index.html`. Needs tmux, Xvfb, xdotool, ImageMagick, Go,
 Python 3 and JDK 8. The emulator screenshots above come from it; the
-photos are of a Nokia 6310i running the MIDP 1.0 build.
+photos are of a Nokia 6310i running the MIDP 1.0 build and a Nokia 7310
+Supernova running the MIDP 2.0 one.
 
 Contributors and AI agents: read [AGENTS.md](AGENTS.md) first.
 Security issues: see [SECURITY.md](SECURITY.md).

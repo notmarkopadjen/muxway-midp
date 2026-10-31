@@ -30,7 +30,7 @@ HTTPS. See [the relay page](features/relay.md).
 | `src/muxway/Prefs.java` | settings, and each pane's view, in the record store |
 | `src/muxway/Text.java` | string helpers CLDC 1.0 lacks, filters for screen and input |
 | `src/muxway/Trace.java` | test-only record of what reaches the screen |
-| `profiles/midp1`, `profiles/midp2` | the few lines that differ per build |
+| `profiles/midp1`, `profiles/midp2` | the few lines that differ per build, and `Files`: the camera and gallery screens on 2.0, nothing on 1.0 |
 | `tools/draw.py` | draws the icon and the wait bar's frames |
 | `scripts/build.sh`, `scripts/check-midp1.sh` | the build and its MIDP 1.0 check |
 | `tests/` | unit tests (Java SE) and the end-to-end harness |
@@ -113,7 +113,9 @@ What a relay has to pass, and all the app ever asks for:
 
 - `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}` and
   `POST /v1/panes/{address}/input`, under the server URL from Settings
-  plus `/v1`. No other route: no `/v1/me`, no tree, no long-poll or events.
+  plus `/v1`; the MIDP 2.0 build also `GET` and `POST
+  /v1/panes/{address}/files` for an [image](features/images.md). No
+  other route: no `/v1/me`, no tree, no long-poll or events.
 - Text mode only: `Accept: text/plain`, and the answers are read as
   `text/plain`.
 - Query parameters: `charset=latin1` or `charset=ascii` on `panes` and on a
@@ -121,7 +123,8 @@ What a relay has to pass, and all the app ever asks for:
   `width=400` on a pane read.
 - Headers: `X-Muxway-Token`, `Accept`, `User-Agent`, `If-None-Match` on
   auto refresh (and `ETag` from the answer), `Content-Type:
-  application/json` and `Content-Length` on input.
+  application/json` and `Content-Length` on input, `Content-Type:
+  multipart/form-data` on an image.
 - Input is `{"text": "..."}` or `{"key": "<name>"}` with one of the
   protocol's named keys; control characters never leave the phone.
 - Pane addresses come from the hub's list and are used only when they
@@ -134,5 +137,9 @@ What a relay has to pass, and all the app ever asks for:
 Both builds come from the same source. Class files target Java 1.1, ProGuard
 preverifies them for CLDC, and `check-midp1.sh` lists every Java ME member
 the MIDP 1.0 JAR references and fails on any MIDP 1.0 lacks, including
-members that only moved to a superclass in MIDP 2.0. The MIDP 1.0 JAR must
-stay under 30 KiB.
+members that only moved to a superclass in MIDP 2.0, the media API and
+the file API. The MIDP 1.0 JAR must stay under 30 KiB. The 2.0 build is
+compiled against the media and file API stubs as well (two pinned jars
+from the emulator's project); code the 1.0 build must not carry sits
+behind the constant `Files.ANY`, false there, so that javac and ProGuard
+leave it out.

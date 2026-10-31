@@ -24,6 +24,9 @@ mkdir -p lib build out
 fetch $MAVEN/cldcapi10/2.0.3/cldcapi10-2.0.3.jar cldc10.jar 80bfffd50bfc991f10ce6bde692cbc71c2faf37ea282faf61c83eada7d64ffd3
 fetch $MAVEN/cldcapi11/2.0.3/cldcapi11-2.0.3.jar cldc11.jar c98e74432dbb035a07d75fdd0515bcc1352933e6b3df401dd536de148c935497
 fetch $MAVEN/midpapi20/2.0.3/midpapi20-2.0.3.jar midp20.jar 62267c1c2127bb0447d999c1e64ec493b17c4baace1017bd80bed208aaae1e25
+# The media and file APIs (camera and gallery), for the MIDP 2.0 build only.
+fetch $MAVEN/microemu-jsr-135/2.0.4/microemu-jsr-135-2.0.4.jar jsr135.jar 9de8726d16d559da98bd36b30e83c992ced946200e80d93a9f4c61f71ceda6af
+fetch $MAVEN/microemu-jsr-75/2.0.4/microemu-jsr-75-2.0.4.jar jsr75.jar d4372cf344ee03f0261ae58bd3d2becb4aed98272bca7c6bb98749efd11b4601
 if [ ! -f lib/proguard.jar ]; then
     curl -sfL -o build/proguard.zip "$PROGUARD_ZIP"
     unzip -q -j -o build/proguard.zip proguard-7.4.2/lib/proguard.jar -d lib
@@ -53,7 +56,7 @@ build() {
     } > "out/$name.jad"
 }
 
-build muxway midp2 midp2.in lib/cldc11.jar:lib/midp20.jar
+build muxway midp2 midp2.in lib/cldc11.jar:lib/midp20.jar:lib/jsr135.jar:lib/jsr75.jar
 # No MIDP 1.0 stub is published, so this build compiles against CLDC 1.0 and
 # the MIDP 2.0 stubs; check-midp1.sh then refuses anything 1.0 lacks.
 build muxway1 midp1 midp1.in lib/cldc10.jar:lib/midp20.jar

@@ -9,7 +9,11 @@ mechanics.
 Tests never touch a real machine. Each run starts its own tmux server on a
 private socket, a test hub and a test host agent on loopback with throwaway
 certificates and tokens, and synthetic panes. Nothing from a developer's own
-environment is read.
+environment is read. A test of [images](features/images.md) gives the
+agent an inbox under the run's directory and the emulator a phone memory
+of its own (the file API implementation of the emulator's project, rooted
+under a throwaway home) holding a synthetic JPEG; the emulator has no
+camera, so that route is tested on a phone.
 
 ## A run
 

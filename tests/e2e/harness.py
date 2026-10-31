@@ -23,6 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 JAVA = os.environ.get("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64") + "/bin/java"
 EMULATOR = ROOT / "lib" / "microemulator.jar"
+# The media and file APIs the MIDP 2.0 build is compiled against; the file one is
+# also the emulator's implementation, registered only for a phone given files.
+JSR135 = ROOT / "lib" / "jsr135.jar"
+JSR75 = ROOT / "lib" / "jsr75.jar"
 DEVICES = ROOT / "tests" / "device"
 HOST = "alice-laptop"
 FIXTURES = ROOT / "tests" / "e2e" / "fixtures"
@@ -101,7 +105,8 @@ class Core:
     def tmux_cmd(self, *args):
         return subprocess.run(["tmux", "-L", self.tmux, *args], capture_output=True, text=True, timeout=10).stdout.strip()
 
-    def start(self, expose="--write"):
+    def start(self, expose="--write", inbox=False):
+        self.inbox = self.dir / "inbox" if inbox else None
         shell = "env -i PATH=/usr/bin:/bin TERM=xterm LANG=C.UTF-8 PS1='$ ' bash --norc --noprofile"
         self.tmux_cmd("-f", "/dev/null", "new-session", "-d", "-s", "work", "-n", "shell", "-x", "80", "-y", "24", shell)
         self.tmux_cmd("select-pane", "-t", "work:0.0", "-T", "test-pane")
@@ -116,7 +121,10 @@ class Core:
         return self
 
     def start_agent(self):
-        self.spawn("agent", "agent", "run", "--dir", str(self.dir / "agent"), "--tmux-name", self.tmux)
+        args = ["agent", "run", "--dir", str(self.dir / "agent"), "--tmux-name", self.tmux]
+        if self.inbox:
+            args += ["--inbox", str(self.inbox)]
+        self.spawn("agent", *args)
         wait_for("agent online", lambda: f"{HOST}\tonline" in self.cli("hub", "agents", "--dir", str(self.dir / "hub")))
 
     def token(self, read=f"{HOST}/*", write=f"{HOST}/*"):
@@ -207,6 +215,16 @@ class Relay:
                     return self.reply(200, *spelt(screen, self.path))
                 if relay.mode == "claude-hostile" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     return self.reply(200, hostile_claude_screen(), {"Content-Type": "text/plain"})
+                if relay.mode.startswith("upload-") and self.command == "POST" and self.path.endswith("/files"):
+                    # A hub or relay that answers an upload badly: a status, or a 201 with a path to distrust.
+                    what = relay.mode[len("upload-"):]
+                    if what.isdigit():
+                        return self.reply(int(what), b'{"error":"test"}\n', {"Content-Type": "application/json"})
+                    bad = {"long": b'{"path":"/' + b"a" * 2000 + b'","bytes":1}',
+                           "control": b'{"path":"/tmp/x\\u001b[2Jy\\n\\u0007z.jpg","bytes":1}',
+                           "notstring": b'{"path":12,"bytes":1}',
+                           "notjson": b"\xff\xfe<html>not json"}
+                    return self.reply(201, bad[what], {"Content-Type": "application/json"})
                 if relay.mode == "charset-hostile" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     # A relay that lies about the charset: the app must decode as UTF-8 and stay up.
                     n = len(relay.requests) % 4
@@ -254,17 +272,21 @@ class Relay:
 
 # Where the emulator's skin buttons are, in window coordinates, and where to
 # click to give a text box focus, per device. The keypad is the same on both.
-KEYPAD = {"k1": (45, 363), "k2": (116, 363), "k5": (116, 399), "k8": (114, 432), "k0": (114, 467), "star": (45, 464),
-          "pound": (183, 463)}
+KEYPAD = {"k1": (45, 363), "k2": (116, 363), "k3": (183, 363), "k5": (116, 399), "k8": (114, 432), "k0": (114, 467),
+          "star": (45, 464), "pound": (183, 463)}
 SKINS = {
     "default": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (110, 150), **KEYPAD},
     "n96x65": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (88, 95), **KEYPAD},
 }
+# The writable pane's left-key menu as the emulator orders it: by priority, then as added.
+PANE_MENU = {"midp1": ["Keys", "Back", "Refresh", "Auto", "Pane", "Settings", "Exit"],
+             "midp2": ["Keys", "Back", "Image", "Refresh", "Auto", "Pane", "Settings", "Exit"]}
 
 
 class Phone:
-    def __init__(self, run, test, profile, props, home=None):
-        """home: a directory for the record store, so a second Phone with the same home is a reinstall."""
+    def __init__(self, run, test, profile, props, home=None, files=None):
+        """home: a directory for the record store, so a second Phone with the same home is a reinstall.
+        files: {name: bytes} to put in the phone's memory, which the emulator keeps under its home."""
         self.run, self.test, self.profile = run, test, profile
         self.device = "n96x65" if profile == "midp1" else "default"
         self.skin = SKINS[self.device]
@@ -279,11 +301,22 @@ class Phone:
         self.out = run.logs(test) / f"emulator-{profile}.log"
         self.shots = run.screens(test, profile)
         self.step = 0
-        cmd = [JAVA, "-Djavax.accessibility.assistive_technologies=", "-cp", f"{EMULATOR}:{DEVICES}"]
+        cmd = [JAVA, "-Djavax.accessibility.assistive_technologies=", "-cp", f"{EMULATOR}:{DEVICES}:{JSR135}:{JSR75}"]
+        if files is not None:
+            # The emulator's file API roots at <home>/.microemulator/filesystem/c; the
+            # photo folder property points the gallery straight at it.
+            home = home or Path(run.tmp) / f"home-{secrets.token_hex(4)}"
+            root = Path(home) / ".microemulator" / "filesystem" / "c"
+            root.mkdir(parents=True, exist_ok=True)
+            for file, data in files.items():
+                (root / file).write_bytes(data)
+            cmd += ["-Dfileconn.dir.photos=file:///c/"]
         if home:
             cmd += [f"-Duser.home={home}", "org.microemu.app.Main", "--rms", "file"]
         else:
             cmd += ["org.microemu.app.Main", "--rms", "memory"]
+        if files is not None:
+            cmd += ["--impl", "org.microemu.cldc.file.FileSystem"]
         if self.device != "default":
             cmd += ["--device", f"{self.device}/device.xml"]
         cmd.append(str(self.dir / f"{name}.jad"))
@@ -329,6 +362,10 @@ class Phone:
             self.key("Down")
         self.click("right")  # Select
 
+    def pick(self, entry):
+        """An entry of the writable pane's menu, by name."""
+        self.menu(PANE_MENU[self.profile].index(entry))
+
     def shot(self, name):
         self.step += 1
         path = self.shots / f"{self.step:02d}-{name}.png"
@@ -353,12 +390,14 @@ class Phone:
         wait_for(what, lambda: any(l.startswith("Rows: ") for l in self.trace()[n:]), 10)
         return self.rows()
 
-    def expect(self, pattern, what, timeout=25):
+    def expect(self, pattern, what, timeout=25, after=0):
+        """Waits for a screen matching the pattern; after skips that many earlier trace lines."""
         rx = re.compile(pattern, re.S)
         try:
-            wait_for(what, lambda: any(rx.search(l) for l in self.trace()), timeout)
+            wait_for(what, lambda: any(rx.search(l) for l in self.trace()[after:]), timeout)
         except AssertionError:
             raise Failure(f"{what}: no screen matched {pattern!r}; last: {self.trace()[-3:]}")
+        return next(l for l in self.trace()[after:] if rx.search(l))
 
     def close(self):
         self.proc.terminate()
