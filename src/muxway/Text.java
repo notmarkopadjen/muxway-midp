@@ -108,6 +108,20 @@ final class Text {
         return name.length() > 64 ? name.substring(0, 64) : name;
     }
 
+    /** One character for the kind column of a listing: what the pane waits for, a space for nothing. */
+    static char mark(String kind) {
+        if (kind.equals("question")) {
+            return '?';
+        } else if (kind.equals("permission")) {
+            return '!';
+        } else if (kind.equals("idle")) {
+            return 'z';
+        } else if (kind.equals("done")) {
+            return 'v';
+        }
+        return ' ';
+    }
+
     /** True when the bytes are well-formed UTF-8; Latin-1 text with accents or symbols is not. */
     static boolean utf8(byte[] b) {
         int i = 0;

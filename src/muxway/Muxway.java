@@ -551,7 +551,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             // The mark comes from the hub's mode column, never from the title.
             boolean w = f[1].equals("write");
             String name = Text.label(f, several);
-            String label = (w ? "* " : "  ") + name;
+            // Then what the pane waits for, from the kind column: ? ! z v.
+            String label = (w ? "*" : " ") + Text.mark(f.length > 4 ? f[4].trim() : "") + name;
             panes.append(label, null);
             addresses.addElement(f[0]);
             names.addElement(name);

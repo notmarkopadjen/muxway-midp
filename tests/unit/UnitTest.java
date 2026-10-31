@@ -198,6 +198,8 @@ public final class UnitTest {
         }
         eq("label_cut_at_64", String.valueOf(label(big, false).length()), "64");
         eq("label_tab_in_title_takes_the_first_part", label("alice/work/0.0\tread\tbash\tsafe\twrite\tmore", false), "safe (bash)");
+        eq("mark_per_kind", "" + Text.mark("question") + Text.mark("permission") + Text.mark("idle") + Text.mark("done") + Text.mark("") + Text.mark("working"),
+            "?!zv  ");
     }
 
     private static void pixelTests() {
