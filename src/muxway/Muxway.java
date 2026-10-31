@@ -20,7 +20,7 @@ import javax.microedition.midlet.MIDlet;
 
 /** muxway for Java ME phones: pick a pane, read it, reply, send a key. */
 public final class Muxway extends MIDlet implements CommandListener, Runnable {
-    private static final int LIST = 1, OPEN = 2, REFRESH = 3, POLL = 4, SEND = 5, TYPE = 6, KEY = 7;
+    private static final int LIST = 1, OPEN = 2, REFRESH = 3, POLL = 4, SEND = 5, TYPE = 6, KEY = 7, PROBE = 8, UPLOAD = 9;
 
     // Labels on the phone, names in the protocol.
     private static final String[][] KEYS = {
@@ -36,6 +36,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Prefs prefs = new Prefs();
     private Api api;
     private Display display;
+    private Files files;
+    // The image on its way up, while the UPLOAD job runs.
+    private Picture picture;
 
     private final Form setup = new Form("Settings");
     private final TextField server = new TextField("Server", "", 120, TextField.URL);
@@ -45,7 +48,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final ChoiceGroup textChoice = new ChoiceGroup("Text", ChoiceGroup.EXCLUSIVE,
         new String[] {"Unicode", "Latin-1", "ASCII"}, null);
     private final StringItem help = new StringItem("Keys",
-        "1 refresh, 2/8 scroll, 5 reply, 0 keys, # title and position, * hidden rows, call key Enter");
+        "1 refresh, 2/8 scroll, " + (Files.ANY ? "3 image, " : "") + "5 reply, 0 keys, # title and position, * hidden rows, call key Enter");
 
     // One pane's own view, picked from a list reached from its menu; made
     // afresh for each pane, since MIDP 1.0 cannot retitle a screen.
@@ -70,6 +73,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Command type = new Command("Type", Command.SCREEN, 2);
     private final Command replyCmd = new Command("Reply", Command.SCREEN, 1);
     private final Command keysCmd = new Command("Keys", Command.SCREEN, 2);
+    private final Command imageCmd = new Command("Image", Command.SCREEN, 3);
     private final Command refreshCmd = new Command("Refresh", Command.SCREEN, 3);
     private final Command autoCmd = new Command("Auto", Command.SCREEN, 4);
     private final Command back = new Command("Back", Command.BACK, 2);
@@ -78,6 +82,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Command exit = new Command("Exit", Command.EXIT, 9);
 
     private static final long TIMEOUT = 45000;
+    // A 1 MiB upload takes a minute over EDGE and three over GPRS.
+    private static final long UPLOAD_TIMEOUT = 240000;
+    private static final String NO_INBOX = "The host takes no files: its agent needs --inbox.";
 
     private int job;
     private String arg;
@@ -124,6 +131,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         display = Display.getDisplay(this);
         Trace.on = "1".equals(getAppProperty("Muxway-Trace"));
+        files = new Files(this, display);
         String version = getAppProperty("MIDlet-Version");
         api = new Api(prefs, "muxway-midp/" + (version == null ? "?" : version) + " " + Ui.PROFILE);
         prefs.load();
@@ -213,6 +221,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             shortcut(PaneView.REPLY);
         } else if (c == keysCmd) {
             shortcut(PaneView.KEYS);
+        } else if (c == imageCmd && Files.ANY) {
+            shortcut(PaneView.IMAGE);
         } else if (d == reply && (c == send || c == type)) {
             String text = Text.printable(reply.getString());
             // Back to the pane at once, where the wait mark runs; a refusal is shown over it.
@@ -242,6 +252,30 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             display.setCurrent(keys);
         } else if (what == PaneView.REFRESH) {
             start(REFRESH, null);
+        } else if (what == PaneView.IMAGE) {
+            // The 1.0 build compiles none of this: Files.ANY is a constant there.
+            if (Files.ANY && view != null && view.writable) {
+                // Asked once per pane whether the host takes files, so no shot is wasted.
+                if (view.inbox) {
+                    files.open();
+                } else {
+                    start(PROBE, null);
+                }
+            }
+        }
+    }
+
+    void showPane() {
+        display.setCurrent(view);
+    }
+
+    /** An image chosen on the phone goes up to the pane's host; Reply then holds its path. */
+    void picked(Picture p) {
+        display.setCurrent(view);
+        picture = p;
+        if (!start(UPLOAD, null)) {
+            p.close();
+            picture = null;
         }
     }
 
@@ -321,6 +355,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         if (canWrite) {
             view.addCommand(replyCmd);
             view.addCommand(keysCmd);
+            if (Files.ANY) {
+                view.addCommand(imageCmd);
+            }
         }
         view.addCommand(refreshCmd);
         view.addCommand(autoCmd);
@@ -361,10 +398,11 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         spin(what);
         new Thread(this).start();
+        final long patience = what == UPLOAD ? UPLOAD_TIMEOUT : TIMEOUT;
         new Thread() {
             public void run() {
                 try {
-                    Thread.sleep(TIMEOUT);
+                    Thread.sleep(patience);
                 } catch (InterruptedException e) {
                 }
                 giveUp(mine);
@@ -450,6 +488,16 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                     display.setCurrent(view);
                     Thread.sleep(300);
                     read(null);
+                }
+                break;
+            case PROBE:
+                if (Files.ANY) {
+                    probe();
+                }
+                break;
+            case UPLOAD:
+                if (Files.ANY) {
+                    upload();
                 }
                 break;
             }
@@ -563,6 +611,54 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         return false;
     }
 
+    private void probe() throws IOException {
+        int status = api.call("panes/" + view.address + "/files", null, null);
+        // 204 from a hub; 200 from a relay that cannot pass an empty answer on.
+        if (status == 204 || status == 200) {
+            view.inbox = true;
+            files.open();
+        } else if (status == 404) {
+            alert(NO_INBOX, view);
+        } else {
+            problem(status);
+        }
+    }
+
+    private void upload() throws IOException {
+        Picture p = picture;
+        int status;
+        try {
+            status = api.upload("panes/" + view.address + "/files", p);
+        } finally {
+            p.close();
+            picture = null;
+        }
+        Trace.show("Image: " + p.length() + " bytes -> " + status);
+        if (status != 201) {
+            if (status == 404) {
+                alert(NO_INBOX, view);
+            } else if (status == 413) {
+                alert("Too big (8 MiB at most).", view);
+            } else {
+                problem(status);
+            }
+            return;
+        }
+        // The path is text for the Reply box and nothing else; the phone never opens it.
+        String path = Text.jsonString(api.body, "path");
+        if (path == null || path.length() == 0) {
+            fail("Unexpected answer.");
+            return;
+        }
+        path = Text.printable(path);
+        if (path.length() > 256) {
+            path = path.substring(0, 256);
+        }
+        Trace.show("Reply " + path);
+        reply.setString(path + " ");
+        display.setCurrent(reply);
+    }
+
     /** Re-reads the open pane every interval while Auto is on and it is shown. */
     private void poll() {
         final int serial = ++pollSerial;
@@ -610,7 +706,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         alert(message, next);
     }
 
-    private void alert(String text, Displayable next) {
+    void alert(String text, Displayable next) {
         Trace.show("Alert: " + text);
         Alert a = new Alert("muxway", text, null, AlertType.INFO);
         a.setTimeout(Alert.FOREVER);
