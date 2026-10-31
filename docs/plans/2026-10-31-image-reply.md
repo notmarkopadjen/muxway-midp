@@ -1,6 +1,6 @@
 # Feature: reply with an image
 
-> Status: proposed 2026-10-31.
+> Status: implemented 2026-10-31.
 
 ## 1. Goal
 
@@ -266,11 +266,24 @@ fixture under the emulator's file root. Security first:
 
 ## Review (after implementation)
 
-- [ ] Diff matches the plan, deviations explained here
-- [ ] Security rules (AGENTS.md section 2) hold
-- [ ] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
-- [ ] Docs and diagrams updated
+- [x] Diff matches the plan. Deviations: F23 and F24 of the plan are one
+  test (F23: Image from the menu, probed once); the overlay hint is not
+  read by a test, since the trace does not carry the overlay. The
+  camera's "no camera" case is the Source list showing Gallery alone,
+  decided by the media API's `supports.video.capture` property, which
+  the emulator does not set. The hub's `201` answer is JSON whatever
+  the phone's `Accept` says, and a relay may relabel it `text/plain`;
+  the app reads one key from it either way.
+- [x] Security rules hold: the write grant is the hub's to check, the
+  path lands in a text box only, nothing of the bytes is logged, the
+  1.0 build carries none of it (`check-midp1.sh` forbids both packages
+  and the JAR is 30363 bytes).
+- [x] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
+- [x] Docs and diagrams updated
 
 ## Test run
 
-Not yet run.
+Run `20261031-095644-9b3dbf6` at commit `9b3dbf6`: passed, 156 tests,
+recorded as [issue #20](https://github.com/notmarkopadjen/muxway-midp/issues/20).
+The device test (D) is the owner's, on a Nokia Supernova: a camera shot
+and a gallery photo into a Claude Code pane's inbox.
