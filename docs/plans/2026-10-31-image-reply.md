@@ -285,5 +285,6 @@ fixture under the emulator's file root. Security first:
 
 Run `20261031-095644-9b3dbf6` at commit `9b3dbf6`: passed, 156 tests,
 recorded as [issue #20](https://github.com/notmarkopadjen/muxway-midp/issues/20).
-The device test (D) is the owner's, on a Nokia Supernova: a camera shot
-and a gallery photo into a Claude Code pane's inbox.
+The device test (D) passed on 2026-10-31 on a Nokia Supernova: a camera
+shot (640x480 JPEG) went through the owner's relay into a Claude Code
+pane's inbox, and its path, sent from the phone, was read by the agent.
