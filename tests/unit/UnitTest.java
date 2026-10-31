@@ -255,6 +255,18 @@ public final class UnitTest {
         eq("address_grammar", String.valueOf(Text.address("alice-laptop/work/1.0")) + Text.address("box/@logs") + Text.address("h/My_Sess.1/0.2"), "truetruetrue");
         eq("address_rejects_injection", String.valueOf(Text.address("host/../admin")) + Text.address("host/a?x=1") + Text.address("Host/a/0.0")
             + Text.address("host") + Text.address("host/") + Text.address("host//a") + Text.address("host/a@b") + Text.address(repeat('h', 33) + "/a/0.0"), "falsefalsefalsefalsefalsefalsefalsefalse");
+        eq("json_string_path", Text.jsonString("{\"path\":\"/home/alice/inbox/20261031-101500-abc123.jpg\",\"bytes\":48213}", "path"),
+            "/home/alice/inbox/20261031-101500-abc123.jpg");
+        eq("json_string_spaced_and_escaped", Text.jsonString("{ \"bytes\" : 1 ,\n \"path\" : \"a \\\"q\\\" \\\\ \\/ \\u0041\\n\" }", "path"), "a \"q\" \\ / A ");
+        eq("json_string_missing_or_not_a_string", String.valueOf(Text.jsonString("{\"bytes\":1}", "path")) + Text.jsonString("{\"path\":12}", "path")
+            + Text.jsonString("{\"path\":\"open", "path") + Text.jsonString("{\"path\":\"\\x\"}", "path") + Text.jsonString("", "path"), "nullnullnullnullnull");
+        eq("image_type_by_name", String.valueOf(Text.imageType("a.JPG")) + Text.imageType("b.jpeg") + Text.imageType("c.png") + Text.imageType("d.gif")
+            + Text.imageType("e.txt") + Text.imageType("jpg"), "image/jpegimage/jpegimage/pngimage/gifnullnull");
+        eq("image_type_by_bytes", String.valueOf(Text.imageType(new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xe0}))
+            + Text.imageType(new byte[] {(byte) 0x89, 'P', 'N', 'G', 13}) + Text.imageType(new byte[] {'G', 'I', 'F', '8'}) + Text.imageType(new byte[0]), "image/jpegimage/pngnullnull");
+        eq("multipart_part", Api.partHead("b1", "image/jpeg") + "<bytes>" + Api.partTail("b1"),
+            "--b1\r\nContent-Disposition: form-data; name=\"file\"; filename=\"file\"\r\nContent-Type: image/jpeg\r\n\r\n<bytes>\r\n--b1--\r\n");
+        eq("problem_415_507", Api.problem(415) + " " + Api.problem(507), "Not an image the host takes. The host's inbox is full.");
         System.exit(failed == 0 ? 0 : 1);
     }
 }

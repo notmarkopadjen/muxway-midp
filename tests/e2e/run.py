@@ -64,9 +64,9 @@ class Run:
 
 
 def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*", write=f"{HOST}/*",
-          props=None, revoke=False, before=None, says_claude=False):
+          props=None, revoke=False, before=None, says_claude=False, inbox=False, files=None):
     logs = run.logs(name)
-    core = Core(run, run.binary, logs).start(expose=expose)
+    core = Core(run, run.binary, logs).start(expose=expose, inbox=inbox)
     run.cleanups.append(core.close)
     tok = core.token(read=read, write=write)
     if revoke:
@@ -78,7 +78,7 @@ def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*",
         before(core)  # the tmux side a test wants in place before the phone looks
     all_props = {"Muxway-Server": relay.url, "Muxway-Token": tok}
     all_props.update(props or {})
-    phone = Phone(run, name, profile, all_props)
+    phone = Phone(run, name, profile, all_props, files=files)
     run.cleanups.append(phone.close)
     return core, relay, phone, tok
 
@@ -167,13 +167,13 @@ def s05(run, name, profile):
     check(len(shown) <= 32 * 1024 + 20, f"showed {len(shown)} characters of a 1 MiB answer")
     phone.shot("big")
     relay.mode = "garbage"
-    phone.menu(2)  # Refresh
+    phone.pick("Refresh")
     phone.expect(r"^work/0\.0: ok ", "garbage content")
     shown = [l for l in phone.trace() if l.startswith("work/0.0: ok")][-1]
     check(not re.search(r"[\x00-\x08\x0b-\x1f\x7f]", shown), f"control characters shown: {shown!r}")
     phone.shot("garbage")
     relay.mode = "normal"
-    phone.menu(2)
+    phone.pick("Refresh")
     phone.expect(r"^work/0\.0: \$", "back to normal")
     check("Exception" not in open(phone.out, errors="replace").read(), "the app threw")
 
@@ -187,7 +187,7 @@ def s08(run, name, profile):
     for i in range(4):
         if i:
             n = len(phone.trace())
-            phone.menu(2)  # Refresh: the next lie
+            phone.pick("Refresh")  # the next lie
             rows = phone.rows_after(n, f"lie {i} drawn")
         else:
             rows = phone.rows_after(0, "drawn")
@@ -293,7 +293,7 @@ def f09(run, name, profile):
     core.tmux_cmd("send-keys", "-t", "work:0.0", "Enter")
     wait_for("sleep running", lambda: core.command() == "sleep")
     open_pane(phone)
-    phone.menu(0)  # Keys
+    phone.pick("Keys")
     phone.shot("keys")
     phone.key("Down")  # Ctrl-C is second
     phone.click("select")
@@ -305,7 +305,7 @@ def f09(run, name, profile):
 def f10(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, props={"Muxway-Refresh": "2"})
     open_pane(phone)
-    phone.menu(3)  # Auto
+    phone.pick("Auto")
     phone.expect(r"^Alert: Auto refresh every 2 s", "auto on")
     dismiss(phone)
     time.sleep(7)
@@ -320,17 +320,17 @@ def f11(run, name, profile):
     open_pane(phone)
     core.stop("agent")
     wait_for("host offline", lambda: f"{HOST}\toffline" in core.cli("hub", "agents", "--dir", str(core.dir / "hub")))
-    phone.menu(2)  # Refresh
+    phone.pick("Refresh")
     phone.expect(r"^Alert: Host offline", "offline")
     phone.shot("offline")
     dismiss(phone)
     core.start_agent()
     n = len(phone.trace())
-    phone.menu(2)
+    phone.pick("Refresh")
     wait_for("content again", lambda: any(l.startswith("work/0.0: ") for l in phone.trace()[n:]), 25)
     phone.shot("recovered")
     relay.close()
-    phone.menu(2)
+    phone.pick("Refresh")
     phone.expect(r"^Alert: No connection", "relay gone")
     phone.shot("no-connection")
 
@@ -452,7 +452,7 @@ def f17(run, name, profile):
     phone.expect(r"^work/0\.0: .*Claude Code", "content")
     rows = phone.rows_after(0, "drawn")
     check(not any("shift+tab" in r for r in rows), f"Auto did not hide the footer: {rows}")
-    phone.menu(4)  # Pane
+    phone.pick("Pane")
     time.sleep(1)
     phone.shot("pane-view")
     phone.key("Down")  # Plain
@@ -463,13 +463,13 @@ def f17(run, name, profile):
     check(any("shift+tab" in r for r in rows), f"Plain still hides the footer: {rows}")
     phone.shot("plain")
     # Kept across a reopen; the second pane is still Auto.
-    phone.menu(1)  # Back
+    phone.pick("Back")
     phone.expect(r"^Panes: ", "pane list again")
     n = len(phone.trace())
     phone.click("select")
     rows = phone.rows_after(n, "reopened")
     check(any("shift+tab" in r for r in rows), f"the pane forgot Plain: {rows}")
-    phone.menu(1)
+    phone.pick("Back")
     phone.expect(r"^Panes: ", "pane list once more")
     phone.key("Down")
     n = len(phone.trace())
@@ -487,7 +487,7 @@ def f18(run, name, profile):
     phone.expect(r"^work/0\.0: .*Claude Code", "content")
     rows = phone.rows_after(0, "drawn")
     check(any("shift+tab" in r for r in rows), f"Auto hid rows of a screen it cannot know: {rows}")
-    phone.menu(4)  # Pane
+    phone.pick("Pane")
     time.sleep(1)
     phone.key("Down", "Down")  # Claude Code
     n = len(phone.trace())
@@ -544,7 +544,7 @@ def f20(run, name, profile):
     phone.click("pound")
     time.sleep(0.5)
     phone.shot("overlay")
-    phone.menu(1)  # Back
+    phone.pick("Back")
     phone.expect(r"^Panes: \* build \(bash\)\|", "the program's title, its mark dropped")
     phone.shot("titled")
 
@@ -597,6 +597,174 @@ def j13(run, name, profile):
     phone.shot("settings")
 
 
+# --- images ----------------------------------------------------------------------
+
+def jpeg(width=64, height=48):
+    """A synthetic JPEG from ImageMagick; nothing of anyone's."""
+    return subprocess.run(["convert", "-size", f"{width}x{height}", "xc:gray50", "jpg:-"], capture_output=True, check=True).stdout
+
+
+def png():
+    return subprocess.run(["convert", "-size", "8x8", "xc:gray50", "png:-"], capture_output=True, check=True).stdout
+
+
+def send_image(phone, shots=False):
+    """3 on the pane, Gallery, the first file of the phone's memory; the upload is then on its way."""
+    n = len(phone.trace())
+    phone.click("k3")
+    phone.expect(r"^Image: Gallery$", "the Camera / Gallery choice (no camera in the emulator)", after=n)
+    if shots:
+        phone.shot("source")
+    phone.click("select")  # Gallery, the only entry
+    phone.expect(r"^Gallery file:///c/: \.\.\|", "the photo folder", after=n)
+    if shots:
+        phone.shot("gallery")
+    phone.key("Down")  # past ..
+    phone.click("select")
+    return n
+
+
+def files_requests(relay):
+    return [r for r in relay.requests if r["path"].split("?")[0].endswith("/files")]
+
+
+@test("S11", "Read-only token: no Image in the menu, 3 does nothing", "e2e-security")
+def s11(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, write=None, inbox=True)
+    open_pane(phone)
+    phone.click("k3")
+    time.sleep(2)
+    phone.shot("pane")
+    check(not any(l.startswith("Image:") for l in phone.trace()), "Image opened on a read-only pane")
+    check(not files_requests(relay), "a files request for a read-only pane")
+
+
+@test("S12", "Host without an inbox: Image says so, no camera, no upload", "e2e-security", profiles=("midp2",))
+def s12(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile)
+    open_pane(phone)
+    phone.click("k3")
+    phone.expect(r"^Alert: The host takes no files", "no inbox reported")
+    phone.shot("no-inbox")
+    reqs = files_requests(relay)
+    check(reqs and all(r["method"] == "GET" for r in reqs), f"not just the probe: {[r['method'] for r in reqs]}")
+    check(not any(l.startswith("Image:") for l in phone.trace()), "the Camera / Gallery choice opened anyway")
+
+
+@test("S13", "Upload answered with a hostile path: cut, printable, in the box only; garbage is an error",
+      "e2e-security", profiles=("midp2",))
+def s13(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="upload-notstring", inbox=True, files={"photo.jpg": jpeg()})
+    open_pane(phone)
+    for mode in ("notstring", "notjson"):
+        relay.mode = "upload-" + mode
+        n = send_image(phone)
+        phone.expect(r"^Alert: Unexpected answer\.", f"{mode}: an error, not a path", after=n)
+        dismiss(phone)
+    relay.mode = "upload-control"
+    n = send_image(phone)
+    line = phone.expect(r"^Reply ", "the box with the path", after=n)
+    check(line == "Reply /tmp/x[2Jy z.jpg", f"control characters not dropped: {line!r}")
+    phone.shot("control")
+    phone.menu(1)  # Back, to the pane
+    relay.mode = "upload-long"
+    n = send_image(phone)
+    line = phone.expect(r"^Reply /a+$", "the long path", after=n)
+    check(len(line) == len("Reply ") + 256, f"path not cut to 256: {len(line)}")
+    phone.shot("long")
+    probes = [r for r in files_requests(relay) if r["method"] == "GET"]
+    check(len(probes) == 1, f"the host was asked {len(probes)} times whether it takes files")
+
+
+@test("S14", "A file over 1 MiB is refused on the phone, before any request", "e2e-security", profiles=("midp2",))
+def s14(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, inbox=True, files={"big.jpg": jpeg() + b"\0" * (1 << 20)})
+    open_pane(phone)
+    n = send_image(phone)
+    phone.expect(r"^Alert: Too big for the phone", "refused", after=n)
+    phone.shot("too-big")
+    check(all(r["method"] == "GET" for r in files_requests(relay)), "the file was sent")
+
+
+@test("S15", "Every refusal of an upload has its message and leaves the pane usable", "e2e-security", profiles=("midp2",))
+def s15(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="upload-429", inbox=True, files={"photo.jpg": jpeg()})
+    open_pane(phone)
+    said = {"429": "Too many tries", "413": r"Too big \(8 MiB", "415": "Not an image the host takes",
+            "507": "The host's inbox is full", "404": "The host takes no files", "403": "Read only"}
+    for status, text in said.items():
+        relay.mode = "upload-" + status
+        n = send_image(phone)
+        phone.expect(r"^Alert: " + text, f"{status} reported", after=n)
+        dismiss(phone)
+    phone.shot("pane")
+    sent = [r for r in files_requests(relay) if r["method"] == "POST"]
+    check(len(sent) == len(said), f"{len(sent)} uploads for {len(said)} tries")
+
+
+@test("S17", "A .jpg holding PNG bytes: the hub refuses it", "e2e-security", profiles=("midp2",))
+def s17(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, inbox=True, files={"fake.jpg": png()})
+    open_pane(phone)
+    n = send_image(phone)
+    phone.expect(r"^Alert: Not an image the host takes", "refused by the hub", after=n)
+    phone.shot("refused")
+    check(not list(core.inbox.glob("*")), "the file landed in the inbox")
+
+
+@test("F22", "Image from the gallery: the file lands in the inbox, the path in the box, the reply in the pane",
+      "e2e-ui", profiles=("midp2",))
+def f22(run, name, profile):
+    photo = jpeg()
+    core, relay, phone, tok = setup(run, name, profile, inbox=True, files={"photo.jpg": photo})
+    open_pane(phone)
+    n = send_image(phone, shots=True)
+    line = phone.expect(r"^Reply /\S+/inbox/\S+\.jpg$", "the box with the inbox path", after=n)
+    path = line[len("Reply "):]
+    time.sleep(1)
+    phone.shot("reply")
+    landed = list(core.inbox.glob("*.jpg"))
+    check(len(landed) == 1 and landed[0].read_bytes() == photo, f"inbox holds {landed}")
+    check(str(landed[0]) == path, f"the path shown is not the file's: {path}")
+    sent = [r for r in files_requests(relay) if r["method"] == "POST"]
+    check(len(sent) == 1 and tok not in sent[0]["body"].decode("latin-1"), "the token is in the upload's body")
+    check(b'filename="file"' in sent[0]["body"] and b"photo.jpg" not in sent[0]["body"], "the phone's file name was sent")
+    phone.click("text")
+    phone.key("End")
+    phone.xdo("type", "--delay", "80", "ok")
+    phone.click("right")  # Send
+    # The path may wrap in the 80-column pane; its file name does not.
+    wait_for("the reply in the pane", lambda: Path(path).name in core.pane() and " ok" in core.pane())
+    phone.expect(r"^work/0\.0: .*inbox/", "the pane shows the path", after=n)
+    phone.shot("pane")
+
+
+@test("F23", "Image from the menu, probed once; the overlay names the key", "e2e-ui", profiles=("midp2",))
+def f23(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, inbox=True, files={"photo.jpg": jpeg()})
+    open_pane(phone)
+    phone.pick("Image")
+    phone.expect(r"^Image: Gallery$", "the choice from the menu")
+    phone.shot("source")
+    phone.click("left")  # Back
+    phone.expect(r"^work/0\.0: ", "back on the pane")
+    n = len(phone.trace())
+    phone.click("k3")
+    phone.expect(r"^Image: Gallery$", "the choice from the key", after=n)
+    probes = [r for r in files_requests(relay) if r["method"] == "GET"]
+    check(len(probes) == 1, f"the host was asked {len(probes)} times whether it takes files")
+
+
+@test("F25", "MIDP 1.0 build: no Image on a writable pane, 3 does nothing", "e2e", profiles=("midp1",))
+def f25(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, inbox=True)
+    open_pane(phone)
+    phone.click("k3")
+    time.sleep(2)
+    check(not any(l.startswith("Image:") for l in phone.trace()), "Image opened on the MIDP 1.0 build")
+    check(not files_requests(relay), "a files request from the MIDP 1.0 build")
+
+
 # --- runner -------------------------------------------------------------------------
 
 def unit_tests(run, results):
@@ -608,7 +776,7 @@ def unit_tests(run, results):
     cp = f"{root}/lib/midp20.jar:{root}/lib/cldc11.jar"
     start = time.time()
     comp = subprocess.run([javac, "-nowarn", "-cp", cp, "-d", str(build), str(root / "src/muxway/Text.java"),
-                           str(root / "src/muxway/Api.java"), str(root / "src/muxway/Prefs.java"),
+                           str(root / "src/muxway/Api.java"), str(root / "src/muxway/Picture.java"), str(root / "src/muxway/Prefs.java"),
                            str(root / "src/muxway/Trace.java"), str(root / "src/muxway/Lens.java"),
                            str(root / "src/muxway/ClaudeCode.java"), str(root / "profiles/midp2/muxway/Ui.java"),
                            str(root / "tests/unit/UnitTest.java")], capture_output=True, text=True)

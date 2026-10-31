@@ -27,22 +27,57 @@ final class Api {
 
     /** GET when json is null, POST otherwise. Returns the HTTP status. */
     int call(String path, String json, String ifNoneMatch) throws IOException {
-        HttpConnection c = (HttpConnection) Connector.open(prefs.server + "/v1/" + path, Connector.READ_WRITE, true);
-        InputStream in = null;
+        return exchange(path, "application/json", json == null ? null : utf8(json), null, 0, null, ifNoneMatch);
+    }
+
+    /**
+     * POSTs one image as the multipart form the hub's files call takes. The
+     * bytes are streamed from the picture, never held whole.
+     */
+    int upload(String path, Picture p) throws IOException {
+        String boundary = "muxway-midp-" + Long.toString(System.currentTimeMillis(), 16);
+        InputStream in = p.open();
         try {
-            c.setRequestMethod(json == null ? HttpConnection.GET : HttpConnection.POST);
+            return exchange(path, "multipart/form-data; boundary=" + boundary, partHead(boundary, p.type()).getBytes(),
+                in, p.length(), partTail(boundary).getBytes(), null);
+        } finally {
+            in.close();
+        }
+    }
+
+    /** The form's one part, named as the protocol wants; the file's name is never the phone's. */
+    static String partHead(String boundary, String type) {
+        return "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"file\"\r\nContent-Type: "
+            + type + "\r\n\r\n";
+    }
+
+    static String partTail(String boundary) {
+        return "\r\n--" + boundary + "--\r\n";
+    }
+
+    /** One request: GET when head is null, else POST of head, then length bytes of in, then tail. */
+    private int exchange(String path, String contentType, byte[] head, InputStream in, int length, byte[] tail,
+                         String ifNoneMatch) throws IOException {
+        HttpConnection c = (HttpConnection) Connector.open(prefs.server + "/v1/" + path, Connector.READ_WRITE, true);
+        InputStream answer = null;
+        try {
+            c.setRequestMethod(head == null ? HttpConnection.GET : HttpConnection.POST);
             c.setRequestProperty("X-Muxway-Token", prefs.token);
             c.setRequestProperty("Accept", "text/plain");
             c.setRequestProperty("User-Agent", agent);
             if (ifNoneMatch != null && ifNoneMatch.length() > 0) {
                 c.setRequestProperty("If-None-Match", ifNoneMatch);
             }
-            if (json != null) {
-                byte[] data = utf8(json);
-                c.setRequestProperty("Content-Type", "application/json");
-                c.setRequestProperty("Content-Length", Integer.toString(data.length));
+            if (head != null) {
+                int total = head.length + (in == null ? 0 : length + tail.length);
+                c.setRequestProperty("Content-Type", contentType);
+                c.setRequestProperty("Content-Length", Integer.toString(total));
                 OutputStream out = c.openOutputStream();
-                out.write(data);
+                out.write(head);
+                if (in != null) {
+                    copy(in, out, length);
+                    out.write(tail);
+                }
                 out.close();
             }
             status = c.getResponseCode();
@@ -52,8 +87,8 @@ final class Api {
             // one HTTP connection only after the response stream was opened.
             byte[] raw = new byte[0];
             try {
-                in = c.openInputStream();
-                raw = read(in);
+                answer = c.openInputStream();
+                raw = read(answer);
             } catch (IOException e) {
                 // Some stacks throw here for an error status; the status alone
                 // says what happened then.
@@ -65,13 +100,27 @@ final class Api {
                 : Text.screen(decode(raw, c.getHeaderField("Content-Type")));
             return status;
         } finally {
-            if (in != null) {
+            if (answer != null) {
                 try {
-                    in.close();
+                    answer.close();
                 } catch (IOException e) {
                 }
             }
             c.close();
+        }
+    }
+
+    /** Exactly length bytes, in small pieces; a file that ends early is an error, not a short upload. */
+    private static void copy(InputStream in, OutputStream out, int length) throws IOException {
+        byte[] buf = new byte[4096];
+        int left = length;
+        while (left > 0) {
+            int n = in.read(buf, 0, Math.min(buf.length, left));
+            if (n <= 0) {
+                throw new IOException("file ended early");
+            }
+            out.write(buf, 0, n);
+            left -= n;
         }
     }
 
@@ -137,11 +186,15 @@ final class Api {
             return "Not found.";
         case 413:
             return "Too long.";
+        case 415:
+            return "Not an image the host takes.";
         case 429:
             return "Too many tries. Wait and try again.";
         case 502:
         case 503:
             return "Host offline.";
+        case 507:
+            return "The host's inbox is full.";
         }
         return "Unexpected answer " + status + ".";
     }

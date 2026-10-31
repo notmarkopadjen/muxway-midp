@@ -223,4 +223,87 @@ final class Text {
         }
         return out.toString();
     }
+
+    /**
+     * The value of one string key in a small JSON object, such as the path
+     * in the answer to an upload. Null when the key is missing, the value
+     * is not a string, or an escape is one the app does not know.
+     */
+    static String jsonString(String json, String key) {
+        int i = json.indexOf("\"" + key + "\"");
+        if (i < 0) {
+            return null;
+        }
+        i = blank(json, i + key.length() + 2);
+        if (i >= json.length() || json.charAt(i) != ':') {
+            return null;
+        }
+        i = blank(json, i + 1);
+        if (i >= json.length() || json.charAt(i) != '"') {
+            return null;
+        }
+        StringBuffer out = new StringBuffer();
+        for (i++; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '"') {
+                return out.toString();
+            }
+            if (c != '\\') {
+                out.append(c);
+                continue;
+            }
+            if (++i >= json.length()) {
+                return null;
+            }
+            c = json.charAt(i);
+            if (c == '"' || c == '\\' || c == '/') {
+                out.append(c);
+            } else if (c == 'n' || c == 't' || c == 'r' || c == 'b' || c == 'f') {
+                out.append(' ');
+            } else if (c == 'u' && i + 4 < json.length()) {
+                try {
+                    out.append((char) Integer.parseInt(json.substring(i + 1, i + 5), 16));
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+                i += 4;
+            } else {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static int blank(String s, int i) {
+        while (i < s.length() && (s.charAt(i) == ' ' || s.charAt(i) == '\t' || s.charAt(i) == '\n' || s.charAt(i) == '\r')) {
+            i++;
+        }
+        return i;
+    }
+
+    /** The type of an image file by its extension; null for anything else. */
+    static String imageType(String name) {
+        String n = name.toLowerCase();
+        if (n.endsWith(".jpg") || n.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (n.endsWith(".png")) {
+            return "image/png";
+        }
+        if (n.endsWith(".gif")) {
+            return "image/gif";
+        }
+        return null;
+    }
+
+    /** The type of an image by its first bytes, JPEG or PNG; null for anything else. */
+    static String imageType(byte[] b) {
+        if (b.length > 3 && (b[0] & 0xff) == 0xff && (b[1] & 0xff) == 0xd8) {
+            return "image/jpeg";
+        }
+        if (b.length > 3 && (b[0] & 0xff) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {
+            return "image/png";
+        }
+        return null;
+    }
 }
