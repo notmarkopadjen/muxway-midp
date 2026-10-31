@@ -20,6 +20,7 @@ javax/microedition/lcdui/CustomItem
 javax/microedition/lcdui/Spacer
 javax/microedition/lcdui/ItemCommandListener
 javax/microedition/media/
+javax/microedition/io/file/
 javax/microedition/pki/
 javax/microedition/io/HttpsConnection
 javax/microedition/io/SecureConnection
