@@ -1,5 +1,8 @@
 # Reply with an image
 
+<img src="../images/photo2-image.jpg" alt="A Nokia 7310 Supernova on the Image screen: Camera, Gallery" width="226">
+<img src="../images/photo2-camera.jpg" alt="The same phone with the camera's viewfinder pointed at a laptop screen" width="226">
+
 An AI coding agent reads a photo when its path is in the prompt. On the
 MIDP 2.0 build a writable pane has **Image**: take a photo with the
 phone's camera, or pick one from the phone's memory, and it goes to the

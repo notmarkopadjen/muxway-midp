@@ -29,6 +29,8 @@ flowchart LR
 
 <img src="../images/photo-pane.jpg" alt="A Nokia 6310i showing a pane's text wrapped over the whole screen" width="226">
 <img src="../images/photo-keys.jpg" alt="The same phone on the Keys menu: Enter, Ctrl-C, Escape" width="226">
+<img src="../images/photo2-overlay.jpg" alt="A Nokia 7310 Supernova showing a Claude Code pane with the overlay: the pane's name on top, rows 151-162 of 162 and the key hints at the bottom" width="226">
+<img src="../images/photo2-keys.jpg" alt="The same phone on the Keys menu, seven keys visible at once" width="226">
 
 The pane fills the whole screen. There is no title bar and no scroll
 marker: the pane's rows are drawn in the phone's small font from the left

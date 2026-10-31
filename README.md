@@ -14,6 +14,15 @@ Code and answers it.
 
 > Works on a Nokia 6310i: list panes, read one, reply, send keys.
 
+The MIDP 2.0 build on a Nokia 7310 Supernova: the same screens in
+colour, with Unicode and a camera.
+
+<p>
+<img src="docs/images/photo2-claude.jpg" alt="A Nokia 7310 Supernova held in front of a laptop, Claude Code through the lens on its colour screen" width="226">
+<img src="docs/images/photo2-panes.jpg" alt="The same phone showing the pane list, two Claude Code panes marked writable" width="226">
+<img src="docs/images/photo2-reply.jpg" alt="The same phone on the reply screen" width="226">
+</p>
+
 The screens as the test suite's emulator draws them, pixel for pixel:
 
 <p>
@@ -98,7 +107,8 @@ the app in the microemulator on a headless display (the MIDP 1.0 build on a
 `test-runs/<id>/` with a summary, JUnit results, logs, a screenshot per step
 and `report/index.html`. Needs tmux, Xvfb, xdotool, ImageMagick, Go,
 Python 3 and JDK 8. The emulator screenshots above come from it; the
-photos are of a Nokia 6310i running the MIDP 1.0 build.
+photos are of a Nokia 6310i running the MIDP 1.0 build and a Nokia 7310
+Supernova running the MIDP 2.0 one.
 
 Contributors and AI agents: read [AGENTS.md](AGENTS.md) first.
 Security issues: see [SECURITY.md](SECURITY.md).
