@@ -178,11 +178,27 @@ core's `docs/ui-guideline.md` §1.6.
 
 ## Review (after implementation)
 
-- [ ] Diff matches the plan, deviations explained here
-- [ ] Security rules (AGENTS.md section 2) hold
-- [ ] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
-- [ ] Docs and diagrams updated
+- [x] Diff matches the plan, deviations explained here
+- [x] Security rules (AGENTS.md section 2) hold
+- [x] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
+- [x] Docs and diagrams updated
+
+Deviations: the 1.0 JAR takes the kind marker and stays under the cap
+(30637 bytes, 83 to spare), so nothing moved behind `Ui.INBOX` beyond
+what the plan said. Test ids differ from the table: the suite already
+had an F25, so the kind marker is F24, the inbox F26, the answer F27 and
+key `9` F28; J15 is the unit test of the row parser and the choices.
+A hostile relay's choices are cut by the body filter every answer goes
+through, not by a second pass, which the inbox page says.
 
 ## Test run
 
-Link to the recorded run: result, commit, logs, screenshots.
+Run `20261101-094429-c48ba04` at commit `c48ba04`, recorded as
+[issue #26](https://github.com/notmarkopadjen/muxway-midp/issues/26):
+174 tests, 2 failed, both on the 1.0 build and both timeouts (S05 and
+F11) while two other suites shared the machine's four cores; both pass
+on their own at the same commit. Two earlier full runs at `36f632e` and
+`9a949d9` each lost one test to a menu pick that landed on the first
+entry, which `c48ba04` fixes in the harness; those two tests pass since.
+The pull request's own run is the one to go by. The device test on the
+owner's phone is still to come.
