@@ -8,8 +8,9 @@ name>`), and the program in brackets, `* muxway android (claude)`. `*`
 marks a pane the token may write to, taken from the hub's `mode` column
 and never from the title; the character after it says what the pane
 waits for, from the hub's `kind` column: `?` a question, `!` a
-permission, `z` idle, `v` done, a space for nothing (`*?build (claude)`); a mark leading the title (`✳`, or `*` once
-folded) is dropped, it is decoration. A title that says nothing, because it is empty,
+permission, `z` idle, `v` done, a space for nothing (`*?build (claude)`);
+a mark leading the title (`✳`, or `*` once folded) is dropped, it is
+decoration. A title that says nothing, because it is empty,
 the program's name, or the host's name (tmux's default until a program
 sets one, and a host is usually named after its machine) gives way to the
 pane's place: `work/0.1 (bash)`. When the list holds panes of several

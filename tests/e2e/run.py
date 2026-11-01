@@ -776,13 +776,6 @@ def asks(core):
     time.sleep(1.2)  # the hub lists from a one-second cache
 
 
-def inbox_rows(phone):
-    """The rows of the inbox as last drawn."""
-    lists = [l for l in phone.trace() if l.startswith("Inbox: ")]
-    check(lists, "no inbox drawn")
-    return [e for e in lists[-1][7:].split("|") if e]
-
-
 @test("S16", "Read-only token: the inbox shows the question, the answer is refused by the hub, the ask still waits",
       "e2e-security", profiles=("midp2",))
 def s16(run, name, profile):

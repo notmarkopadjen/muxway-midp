@@ -1,6 +1,6 @@
 # Feature: what waits, and a question's answer, on the keypad
 
-> Status: draft, awaiting the owner's review. Follows the core's
+> Status: approved 2026-10-31, implemented in version 0.5.0. Follows the core's
 > `docs/plans/2026-10-31-agent-orchestration.md` (muxway#181, merged as
 > PR #183), whose plan left the native clients to their own repositories.
 
