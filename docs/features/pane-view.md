@@ -6,8 +6,11 @@ Panes are listed by what runs in them, not by number: the pane's title,
 which a program sets for itself (Claude Code calls its terminal `✳ <session
 name>`), and the program in brackets, `* muxway android (claude)`. `*`
 marks a pane the token may write to, taken from the hub's `mode` column
-and never from the title; a mark leading the title (`✳`, or `*` once
-folded) is dropped, it is decoration. A title that says nothing, because it is empty,
+and never from the title; the character after it says what the pane
+waits for, from the hub's `kind` column: `?` a question, `!` a
+permission, `z` idle, `v` done, a space for nothing (`*?build (claude)`);
+a mark leading the title (`✳`, or `*` once folded) is dropped, it is
+decoration. A title that says nothing, because it is empty,
 the program's name, or the host's name (tmux's default until a program
 sets one, and a host is usually named after its machine) gives way to the
 pane's place: `work/0.1 (bash)`. When the list holds panes of several
@@ -18,10 +21,10 @@ in Latin-1 like the content (see [lenses](lenses.md)), so `✳` arrives as
 
 ```mermaid
 flowchart LR
-    R["address TAB mode TAB command TAB title"] --> T{title empty,<br/>= command<br/>or = host?}
+    R["address TAB mode TAB command TAB title TAB kind"] --> T{title empty,<br/>= command<br/>or = host?}
     T -- no --> N["title (command)"]
     T -- yes --> A["session/window.pane (command)"]
-    N --> M["mark from mode: '* ' or '  '"]
+    N --> M["mark from mode: '*' or ' ', then from kind: '? ! z v' or ' '"]
     A --> M
 ```
 
@@ -46,6 +49,7 @@ characters.
 | `2` / `8`, or the joystick | scroll one row up / down; hold to repeat |
 | `3` | Image (writable panes, MIDP 2.0 build): see [images](images.md) |
 | `5` | Reply (writable panes) |
+| `9` | Inbox (MIDP 2.0 build): see [the inbox](inbox.md) |
 | `0` | Keys (writable panes) |
 | `#` | show or hide the title and scroll position |
 | `*` | show or hide what a [lens](lenses.md) hid (footer, status) |

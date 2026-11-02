@@ -198,6 +198,25 @@ public final class UnitTest {
         }
         eq("label_cut_at_64", String.valueOf(label(big, false).length()), "64");
         eq("label_tab_in_title_takes_the_first_part", label("alice/work/0.0\tread\tbash\tsafe\twrite\tmore", false), "safe (bash)");
+        String[] inbox = Text.split("alice/work/0.0\tquestion\t1767225600\tdeploy to staging?\tyes|no", '\t');
+        eq("inbox_label", Text.inboxLabel(inbox, "build (claude)"), "? build (claude): deploy to staging?");
+        eq("inbox_label_without_text", Text.inboxLabel(Text.split("alice/work/0.0\tdone\t1\t\t", '\t'), "build"), "v build");
+        String longText = "alice/work/0.0\tidle\t1\t";
+        for (int i = 0; i < 100; i++) {
+            longText += "y";
+        }
+        eq("inbox_label_cut_at_64", String.valueOf(Text.inboxLabel(Text.split(longText, '\t'), "b").length()), "64");
+        eq("choices_split", join(Text.choices("yes|no|later")), "yes|no|later");
+        eq("choices_one_is_none", String.valueOf(Text.choices("yes")) + Text.choices("") + Text.choices("||"), "nullnullnull");
+        String nine = "c0|c1|c2|c3|c4|c5|c6|c7|c8";
+        eq("choices_capped_at_eight", String.valueOf(Text.choices(nine).length), "8");
+        String wide = "";
+        for (int i = 0; i < 50; i++) {
+            wide += "x";
+        }
+        eq("choices_cut_at_40", String.valueOf(Text.choices("a|" + wide)[1].length()), "40");
+        eq("mark_per_kind", "" + Text.mark("question") + Text.mark("permission") + Text.mark("idle") + Text.mark("done") + Text.mark("") + Text.mark("working"),
+            "?!zv  ");
     }
 
     private static void pixelTests() {
@@ -242,7 +261,8 @@ public final class UnitTest {
         eq("printable_keeps_unicode", Text.printable("čćž 日本"), "čćž 日本");
         eq("screen_keeps_newlines_and_tabs", Text.screen("a\tb\nc\u0007\u001bd\r"), "a\tb\ncd");
         eq("split_keeps_empty_fields", String.valueOf(Text.split("a\t\tb", '\t').length), "3");
-        eq("json_text_escapes_quotes", Api.text("say \"hi\" \\ bye"), "{\"text\":\"say \\\"hi\\\" \\\\ bye\"}");
+        eq("json_text_escapes_quotes", Api.json("text", "say \"hi\" \\ bye"), "{\"text\":\"say \\\"hi\\\" \\\\ bye\"}");
+        eq("json_choice", Api.json("choice", "yes"), "{\"choice\":\"yes\"}");
         eq("json_key", Api.key("C-c"), "{\"key\":\"C-c\"}");
         eq("problem_401", Api.problem(401), "Token refused.");
         eq("problem_503", Api.problem(503), "Host offline.");

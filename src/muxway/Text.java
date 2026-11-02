@@ -108,6 +108,52 @@ final class Text {
         return name.length() > 64 ? name.substring(0, 64) : name;
     }
 
+    /** One character for the kind column of a listing: what the pane waits for, a space for nothing. */
+    static char mark(String kind) {
+        if (kind.equals("question")) {
+            return '?';
+        } else if (kind.equals("permission")) {
+            return '!';
+        } else if (kind.equals("idle")) {
+            return 'z';
+        } else if (kind.equals("done")) {
+            return 'v';
+        }
+        return ' ';
+    }
+
+    /**
+     * What the inbox shows for one row of the hub's text inbox (address,
+     * kind, at, text, choices): the kind's mark, the pane's name and the
+     * text. Cut at 64 characters.
+     */
+    static String inboxLabel(String[] f, String name) {
+        String text = f.length > 3 ? f[3].trim() : "";
+        String label = mark(f[1].trim()) + " " + name + (text.length() > 0 ? ": " + text : "");
+        return label.length() > 64 ? label.substring(0, 64) : label;
+    }
+
+    /** The choices column split on |: at most eight, each cut to 40 characters; null when there are none. */
+    static String[] choices(String column) {
+        String[] all = split(column, '|');
+        int n = 0;
+        for (int i = 0; i < all.length && n < 8; i++) {
+            all[i] = all[i].trim();
+            if (all[i].length() > 40) {
+                all[i] = all[i].substring(0, 40);
+            }
+            if (all[i].length() > 0) {
+                all[n++] = all[i];
+            }
+        }
+        if (n < 2) {
+            return null;
+        }
+        String[] out = new String[n];
+        System.arraycopy(all, 0, out, 0, n);
+        return out;
+    }
+
     /** True when the bytes are well-formed UTF-8; Latin-1 text with accents or symbols is not. */
     static boolean utf8(byte[] b) {
         int i = 0;

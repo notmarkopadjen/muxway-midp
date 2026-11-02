@@ -48,13 +48,23 @@ stateDiagram-v2
     Pane --> Keys: Keys (writable panes)
     Keys --> Pane: a key is sent
     Pane --> Panes: Back
+    Panes --> Inbox: Inbox (MIDP 2.0)
+    Pane --> Inbox: 9 (MIDP 2.0)
+    Inbox --> Pane: select
+    Inbox --> Answer: select a row with choices
+    Answer --> Inbox: a choice is sent
     Panes --> Settings: Settings, or the token was refused
 ```
 
 - **Panes** is a `List` of the panes the token can read, from
   `GET /v1/panes` in text mode, each by its title and program (`* build
   (claude)`, or `work/0.1 (bash)` when the title says nothing); `*` marks
-  writable ones, offline hosts follow with `-`.
+  writable ones, the character after it what the pane waits for (`?` `!`
+  `z` `v`), offline hosts follow with `-`.
+- **Inbox** (MIDP 2.0 build) is a `List` of every waiting pane from
+  `GET /v1/inbox` in text mode, oldest first; a row with choices opens
+  **Answer**, a `List` of them, and the pick goes to
+  `POST /v1/panes/{address}/answer`. See [the inbox](features/inbox.md).
 - **Pane** is a `Canvas`, not a `Form`: a MIDP 1.0 form opens at its top
   and cannot be scrolled from code, while a terminal must open at its
   bottom. The canvas fills the whole screen with the rows in a monospace
@@ -114,8 +124,10 @@ What a relay has to pass, and all the app ever asks for:
 - `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}` and
   `POST /v1/panes/{address}/input`, under the server URL from Settings
   plus `/v1`; the MIDP 2.0 build also `GET` and `POST
-  /v1/panes/{address}/files` for an [image](features/images.md). No
-  other route: no `/v1/me`, no tree, no long-poll or events.
+  /v1/panes/{address}/files` for an [image](features/images.md), and
+  `GET /v1/inbox` and `POST /v1/panes/{address}/answer` for
+  [the inbox](features/inbox.md). No other route: no `/v1/me`, no tree,
+  no long-poll or events.
 - Text mode only: `Accept: text/plain`, and the answers are read as
   `text/plain`.
 - Query parameters: `charset=latin1` or `charset=ascii` on `panes` and on a
@@ -126,7 +138,8 @@ What a relay has to pass, and all the app ever asks for:
   application/json` and `Content-Length` on input, `Content-Type:
   multipart/form-data` on an image.
 - Input is `{"text": "..."}` or `{"key": "<name>"}` with one of the
-  protocol's named keys; control characters never leave the phone.
+  protocol's named keys, an answer `{"choice": "..."}` with one of the
+  choices the inbox row carried; control characters never leave the phone.
 - Pane addresses come from the hub's list and are used only when they
   follow the protocol's grammar (`host/session/window.pane` or
   `host/@alias`); any other row is skipped. The server URL must be

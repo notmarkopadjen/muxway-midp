@@ -10,6 +10,9 @@ final class Ui {
     // Unicode from the hub; these phones can show it.
     static final int TEXT = 0;
 
+    // The inbox of what waits across hosts, and answers to a question's choices.
+    static final boolean INBOX = true;
+
     private Ui() {
     }
 }

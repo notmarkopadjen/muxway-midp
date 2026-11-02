@@ -145,6 +145,29 @@ class Core:
     def command(self):
         return self.tmux_cmd("display-message", "-p", "-t", "work:0.0", "#{pane_current_command}")
 
+    def pane_id(self, target="work:0.0"):
+        return self.tmux_cmd("display-message", "-p", "-t", target, "#{pane_id}")
+
+    def notify(self, kind, text="", target="work:0.0"):
+        """What a harness's hook does on the host: the pane needs its owner, or works again."""
+        self.cli("notify", "--dir", str(self.dir / "agent"), "--pane", self.pane_id(target), "--kind", kind, "--text", text)
+
+    def ask(self, text, choices, target="work:0.0", timeout="10m"):
+        """Runs muxway ask inside the pane, so the answer and the exit code land on its screen."""
+        cmd = (f"{self.bin} ask --dir {self.dir / 'agent'} --pane {self.pane_id(target)} --text '{text}' "
+               + " ".join(f"--choice {c}" for c in choices) + f" --timeout {timeout}; echo EXIT=$?")
+        self.tmux_cmd("send-keys", "-t", target, "-l", cmd)
+        self.tmux_cmd("send-keys", "-t", target, "Enter")
+
+    def waiting(self, tok):
+        """The hub's inbox in text mode, one row per waiting pane."""
+        c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
+        c.request("GET", "/v1/inbox", headers={"Authorization": f"Bearer {tok}", "Accept": "text/plain"})
+        r = c.getresponse()
+        body = r.read().decode()
+        c.close()
+        return [l for l in body.split("\n") if l]
+
     def close(self):
         for name in list(self.procs):
             self.stop(name)
@@ -243,6 +266,10 @@ class Relay:
                     data = data.replace(b"\tread\t", b"\twrite\t")
                 if relay.says_claude and self.path.split("?")[0] == "/v1/panes":
                     data = data.replace(b"\tbash\t", b"\tclaude\t")  # the program column says claude
+                if relay.mode == "lie-inbox" and self.path.split("?")[0] == "/v1/inbox":
+                    # Choices a hub would never send: nine of them, one too long, one with a control character.
+                    choices = ["x" * 41, "bad\x07ctl"] + [f"c{i}" for i in range(9)]
+                    data = f"{HOST}/work/0.0\tquestion\t1\tpick one\t{'|'.join(choices)}\n".encode()
                 if relay.mode == "lie-title" and self.path.split("?")[0] == "/v1/panes":
                     # Titles a program could choose: one that looks like a writable entry, one too long.
                     data = (f"{HOST}/work/0.0\tread\tbash\t* {HOST}/work/0.0 claude\twrite\tx\n"
@@ -272,8 +299,8 @@ class Relay:
 
 # Where the emulator's skin buttons are, in window coordinates, and where to
 # click to give a text box focus, per device. The keypad is the same on both.
-KEYPAD = {"k1": (45, 363), "k2": (116, 363), "k3": (183, 363), "k5": (116, 399), "k8": (114, 432), "k0": (114, 467),
-          "star": (45, 464), "pound": (183, 463)}
+KEYPAD = {"k1": (45, 363), "k2": (116, 363), "k3": (183, 363), "k5": (116, 399), "k8": (114, 432), "k9": (183, 432),
+          "k0": (114, 467), "star": (45, 464), "pound": (183, 463)}
 SKINS = {
     "default": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (110, 150), **KEYPAD},
     "n96x65": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (88, 95), **KEYPAD},
@@ -281,6 +308,8 @@ SKINS = {
 # The writable pane's left-key menu as the emulator orders it: by priority, then as added.
 PANE_MENU = {"midp1": ["Keys", "Back", "Refresh", "Auto", "Pane", "Settings", "Exit"],
              "midp2": ["Keys", "Back", "Image", "Refresh", "Auto", "Pane", "Settings", "Exit"]}
+# The pane list's menu the same way; Refresh sits on the right soft key.
+PANES_MENU = {"midp1": ["Settings", "Exit"], "midp2": ["Inbox", "Settings", "Exit"]}
 
 
 class Phone:
@@ -357,7 +386,7 @@ class Phone:
     def menu(self, index):
         """Open the left soft key's menu and choose its index-th entry."""
         self.click("left")
-        time.sleep(0.6)  # a Down pressed before the menu is up lands on the first entry
+        time.sleep(1.2)  # a Down pressed before the menu is up lands on the first entry; a full run is slow
         for _ in range(index):
             self.key("Down")
         self.click("right")  # Select
@@ -365,6 +394,10 @@ class Phone:
     def pick(self, entry):
         """An entry of the writable pane's menu, by name."""
         self.menu(PANE_MENU[self.profile].index(entry))
+
+    def pick_list(self, entry):
+        """An entry of the pane list's menu, by name."""
+        self.menu(PANES_MENU[self.profile].index(entry))
 
     def shot(self, name):
         self.step += 1
