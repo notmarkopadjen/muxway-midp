@@ -198,6 +198,11 @@ public final class UnitTest {
         }
         eq("label_cut_at_64", String.valueOf(label(big, false).length()), "64");
         eq("label_tab_in_title_takes_the_first_part", label("alice/work/0.0\tread\tbash\tsafe\twrite\tmore", false), "safe (bash)");
+        eq("label_mail_before_the_program", Text.label(Text.split("alice/work/0.0\twrite\tclaude\tbuild\t\t2\t", '\t'), false, Text.mail("2", true)), "build \u2709 2 (claude)");
+        eq("label_mail_survives_the_cut", Text.label(Text.split(big + "\t\t7\t", '\t'), false, Text.mail("7", false)).substring(0, 64), repeat('x', 60) + " M 7");
+        eq("mail_unicode_and_latin1", Text.mail(" 12 ", true) + "|" + Text.mail("3", false), "\u2709 12|M 3");
+        eq("mail_none", Text.mail("", true) + Text.mail("0", true) + Text.mail("   ", false), "");
+        eq("mail_refuses_letters_and_four_digits", Text.mail("12abc", true) + Text.mail("1234", true) + Text.mail("-1", true) + Text.mail("1 2", true), "");
         String[] inbox = Text.split("alice/work/0.0\tquestion\t1767225600\tdeploy to staging?\tyes|no", '\t');
         eq("inbox_label", Text.inboxLabel(inbox, "build (claude)"), "? build (claude): deploy to staging?");
         eq("inbox_label_without_text", Text.inboxLabel(Text.split("alice/work/0.0\tdone\t1\t\t", '\t'), "build"), "v build");
@@ -234,7 +239,52 @@ public final class UnitTest {
         eq("pixel_zero_leaves_rows", join(Text.wrap(new String[] {"mmmmmmmm"}, w, 6, 0)), "mmmmmmmm");
     }
 
+    private static java.util.Vector vector(String[] a) {
+        java.util.Vector v = new java.util.Vector();
+        for (int i = 0; i < a.length; i++) {
+            v.addElement(a[i]);
+        }
+        return v;
+    }
+
+    private static String ints(int[] a) {
+        StringBuffer out = new StringBuffer();
+        for (int i = 0; i < a.length; i++) {
+            if (i > 0) {
+                out.append(',');
+            }
+            out.append(a[i]);
+        }
+        return out.toString();
+    }
+
+    /** The list as Talk arranges it: edge and row index per position. */
+    private static String arranged(String[] addresses, String[] partners) {
+        int[] group = Talk.groups(vector(addresses), vector(partners));
+        int[] order = Talk.order(group);
+        StringBuffer out = new StringBuffer();
+        for (int p = 0; p < order.length; p++) {
+            out.append(Talk.any(group) ? Talk.edge(group, order, p) : '.').append(order[p]);
+        }
+        return out.toString();
+    }
+
+    private static void talkTests() {
+        String[] a = {"h/w/0.0", "h/w/0.1", "h/w/0.2", "h/w/0.3", "h/w/0.4"};
+        eq("talk_nobody", ints(Talk.groups(vector(a), vector(new String[] {"", "", "", "", ""}))), "-1,-1,-1,-1,-1");
+        eq("talk_nobody_arranged", arranged(a, new String[] {"", "", "", "", ""}), ".0.1.2.3.4");
+        eq("talk_pair_pulled_together", arranged(a, new String[] {"h/w/0.2", "", "h/w/0.0", "", ""}), "[0]2 1 3 4");
+        eq("talk_partners_of_partners", ints(Talk.groups(vector(a), vector(new String[] {"h/w/0.1", "h/w/0.0|h/w/0.3", "", "h/w/0.1", ""}))), "0,0,-1,0,-1");
+        eq("talk_two_groups_apart", arranged(a, new String[] {"h/w/0.4", "h/w/0.3", "", "h/w/0.1", "h/w/0.0"}), "[0]4[1]3 2");
+        eq("talk_three_in_a_frame", arranged(a, new String[] {"h/w/0.3", "", "", "h/w/0.0|h/w/0.4", "h/w/0.3"}), "[0|3]4 1 2");
+        eq("talk_unknown_partner_skipped", arranged(a, new String[] {"x/y/0.0|h/w/0.9", "", "", "", ""}), ".0.1.2.3.4");
+        eq("talk_self_and_junk_are_nothing", arranged(a, new String[] {"h/w/0.0|../admin|", "", "", "", ""}), ".0.1.2.3.4");
+        eq("talk_one_way_still_groups", arranged(a, new String[] {"", "", "", "h/w/0.1", ""}), " 0[1]3 2 4");
+        eq("talk_empty_list", arranged(new String[0], new String[0]), "");
+    }
+
     public static void main(String[] args) {
+        talkTests();
         lensTests();
         lensAsciiTests();
         wrapTests();
