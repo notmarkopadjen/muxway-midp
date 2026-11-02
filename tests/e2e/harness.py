@@ -299,7 +299,11 @@ class Relay:
         for row in data.decode("latin-1").split("\n"):
             if not row:
                 continue
-            address = row.split("\t")[0]
+            # A hub that writes the two columns itself gets them replaced, an older one gets them added.
+            fields = row.split("\t")
+            if len(fields) >= 7:
+                row = "\t".join(fields[:5])
+            address = fields[0]
             mail = talk = ""
             if self.mode == "talk":
                 if address == f"{HOST}/work/0.0":
