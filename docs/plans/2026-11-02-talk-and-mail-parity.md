@@ -200,7 +200,4 @@ than being cut itself, so a long title shows `… M 7` at the end of its
 
 ## Test run
 
-Owed: the box the work was done on had no disk for a run. The unit
-tests pass locally (119 cases, J16 and J17 among them), both JARs build
-and `check-midp1.sh` is clean; the suite with S20, F29 and F30 runs on
-the pull request, and the device test is the owner's.
+Run 20261102-141912-3616384, recorded as [issue #30](https://github.com/notmarkopadjen/muxway-midp/issues/30): 194 tests passed, none failed, against the core's `text-columns` branch (main plus the text listing's mail and talk columns). The pull request's CI runs the same suite against the core's `main`, which has no columns yet, and passed too: the relay adds the columns where the hub has none and replaces them where it has, since 3616384. The Nokia test is Marko's.
