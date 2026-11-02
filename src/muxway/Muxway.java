@@ -593,6 +593,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             }
         }
         StringBuffer shown = new StringBuffer();
+        // The labels and the talk column, until the rows' order is known.
+        Vector labels = Ui.TALK ? new Vector() : null;
+        Vector talk = Ui.TALK ? new Vector() : null;
         for (int i = 0; i < rows.length; i++) {
             String[] f = Text.split(rows[i], '\t');
             if (f.length < 3 || !Text.address(f[0])) {
@@ -600,15 +603,24 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             }
             // The mark comes from the hub's mode column, never from the title.
             boolean w = f[1].equals("write");
-            String name = Text.label(f, several);
+            // The unread mail after the name, from the sixth column where the hub sends one.
+            String name = Text.label(f, several, Ui.TALK && f.length > 5 ? Text.mail(f[5], prefs.text == 0) : "");
             // Then what the pane waits for, from the kind column: ? ! z v.
             String label = (w ? "*" : " ") + Text.mark(f.length > 4 ? f[4].trim() : "") + name;
-            panes.append(label, null);
+            if (Ui.TALK) {
+                labels.addElement(label);
+                talk.addElement(f.length > 6 ? f[6] : "");
+            } else {
+                panes.append(label, null);
+                shown.append(label).append('\n');
+            }
             addresses.addElement(f[0]);
             names.addElement(name);
             commands.addElement(f[2].trim());
             writable.addElement(new Boolean(w));
-            shown.append(label).append('\n');
+        }
+        if (Ui.TALK) {
+            arrange(labels, talk, shown);
         }
         if (api.call("hosts", null, null) == 200) {
             String[] hosts = Text.split(api.body, '\n');
@@ -626,6 +638,33 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         Trace.show("Panes: " + shown.toString());
         display.setCurrent(panes);
+    }
+
+    /**
+     * Fills the list from the labels, a group's rows together behind the
+     * frame's edge, and puts the parallel Vectors in the same order so a
+     * select opens the row it names. MIDP 2.0 build only.
+     */
+    private void arrange(Vector labels, Vector talk, StringBuffer shown) {
+        int[] group = Talk.groups(addresses, talk);
+        int[] order = Talk.order(group);
+        boolean framed = Talk.any(group);
+        Vector[] kept = {addresses, names, commands, writable};
+        Object[][] was = new Object[kept.length][];
+        for (int k = 0; k < kept.length; k++) {
+            was[k] = new Object[kept[k].size()];
+            kept[k].copyInto(was[k]);
+            kept[k].removeAllElements();
+        }
+        for (int p = 0; p < order.length; p++) {
+            int i = order[p];
+            String label = (framed ? String.valueOf(Talk.edge(group, order, p)) : "") + (String) labels.elementAt(i);
+            panes.append(label, null);
+            shown.append(label).append('\n');
+            for (int k = 0; k < kept.length; k++) {
+                kept[k].addElement(was[k][i]);
+            }
+        }
     }
 
     /** The query parameter for the Text setting; empty for Unicode. */

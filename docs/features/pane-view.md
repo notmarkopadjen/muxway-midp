@@ -19,6 +19,29 @@ the phone scrolls long ones. On the MIDP 1.0 build the list is asked for
 in Latin-1 like the content (see [lenses](lenses.md)), so `✳` arrives as
 `*`.
 
+On the MIDP 2.0 build the list also shows who talks with whom and who
+has mail, from two more columns of the hub's text listing (`mail`, the
+unread count, and `talk`, the partners' addresses). Panes that wrote or
+mailed to each other in the last ten minutes, partners of partners
+included, form a group, as on the web (the core's
+[talk](https://github.com/notmarkopadjen/muxway/blob/main/docs/features/talk.md)):
+the group's rows are kept together, pulled up behind the group's first
+row, and framed by an edge at the row's left, `[` on the first row, `|`
+between, `]` on the last, a space on every other row; the column is
+there only while the list holds a group. A pane whose process has unread
+[mail](https://github.com/notmarkopadjen/muxway/blob/main/docs/features/mail.md)
+shows the count after its name, `✉ 2`, or `M 2` when the Text setting is
+Latin-1 or ASCII; the name gives way so the count stays within the cut.
+Nothing pops up for a message. A partner the list does not hold, a count
+that is not one to three digits, and the column of a hub that does not
+write them yet, change nothing.
+
+```
+[*?build ✉ 2 (claude)
+]* review (claude)
+ * work/0.1 (bash)
+```
+
 ```mermaid
 flowchart LR
     R["address TAB mode TAB command TAB title TAB kind"] --> T{title empty,<br/>= command<br/>or = host?}

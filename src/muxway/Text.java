@@ -86,6 +86,11 @@ final class Text {
      * panes of several hosts the host leads. Cut at 64 characters.
      */
     static String label(String[] f, boolean hosts) {
+        return label(f, hosts, "");
+    }
+
+    /** The same with the mail mark after the name, before the program, so a cut keeps it. */
+    static String label(String[] f, boolean hosts, String mail) {
         String address = f[0];
         int slash = address.indexOf('/');
         String host = slash < 0 ? address : address.substring(0, slash);
@@ -102,10 +107,33 @@ final class Text {
         if (hosts) {
             name = host + "/" + name;
         }
+        if (Ui.TALK && mail.length() > 0) {
+            // The name gives way, the count stays within the cut.
+            int room = 63 - mail.length();
+            name = (name.length() > room ? name.substring(0, room) : name) + " " + mail;
+        }
         if (command.length() > 0) {
             name += " (" + command + ")";
         }
         return name.length() > 64 ? name.substring(0, 64) : name;
+    }
+
+    /**
+     * The mail column of a listing as the list shows it: an envelope and
+     * the unread count, M where the font has no envelope; empty when there
+     * is none, or when the column is not one to three digits.
+     */
+    static String mail(String column, boolean unicode) {
+        column = column.trim();
+        if (column.length() == 0 || column.length() > 3 || column.equals("0")) {
+            return "";
+        }
+        for (int i = 0; i < column.length(); i++) {
+            if (column.charAt(i) < '0' || column.charAt(i) > '9') {
+                return "";
+            }
+        }
+        return (unicode ? "\u2709 " : "M ") + column;
     }
 
     /** One character for the kind column of a listing: what the pane waits for, a space for nothing. */

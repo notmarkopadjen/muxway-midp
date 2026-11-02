@@ -13,6 +13,9 @@ final class Ui {
     // The inbox and its answers: a screen, a job and a parser the 30 KiB JAR has no room for.
     static final boolean INBOX = false;
 
+    // Talk groups and mail counts: a class and a few joins the cap has no room for either.
+    static final boolean TALK = false;
+
     private Ui() {
     }
 }

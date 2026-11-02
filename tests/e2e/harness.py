@@ -270,6 +270,8 @@ class Relay:
                     # Choices a hub would never send: nine of them, one too long, one with a control character.
                     choices = ["x" * 41, "bad\x07ctl"] + [f"c{i}" for i in range(9)]
                     data = f"{HOST}/work/0.0\tquestion\t1\tpick one\t{'|'.join(choices)}\n".encode()
+                if relay.mode in ("talk", "lie-talk") and self.path.split("?")[0] == "/v1/panes":
+                    data = relay.columns(data)
                 if relay.mode == "lie-title" and self.path.split("?")[0] == "/v1/panes":
                     # Titles a program could choose: one that looks like a writable entry, one too long.
                     data = (f"{HOST}/work/0.0\tread\tbash\t* {HOST}/work/0.0 claude\twrite\tx\n"
@@ -289,6 +291,32 @@ class Relay:
 
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", self.port), Handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def columns(self, data):
+        """The hub's rows with the mail and talk columns a newer hub writes: in talk mode the first
+        pane holds two mails and talked with the third; in lie-talk mode both columns are forged."""
+        out = []
+        for row in data.decode("latin-1").split("\n"):
+            if not row:
+                continue
+            # A hub that writes the two columns itself gets them replaced, an older one gets them added.
+            fields = row.split("\t")
+            if len(fields) >= 7:
+                row = "\t".join(fields[:5])
+            address = fields[0]
+            mail = talk = ""
+            if self.mode == "talk":
+                if address == f"{HOST}/work/0.0":
+                    mail, talk = "2", f"{HOST}/work/0.2"
+                elif address == f"{HOST}/work/0.2":
+                    talk = f"{HOST}/work/0.0"
+            elif address == f"{HOST}/work/0.0":
+                # Letters in the count; itself, a path and a stranger as partners.
+                mail, talk = "12abc", f"{HOST}/work/0.0|../admin|x/y/0.0"
+            else:
+                mail, talk = "3" * 300, f"{HOST}/work/0.9|\x1b[2J"
+            out.append(f"{row}\t{mail}\t{talk}")
+        return ("\n".join(out) + "\n").encode("latin-1")
 
     def close(self):
         self.server.shutdown()

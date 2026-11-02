@@ -834,6 +834,48 @@ def s19(run, name, profile):
           f"inbox or answer never requested: {paths}")
 
 
+@test("S20", "A relay that forges the mail and talk columns: letters, 300 digits, itself, a path, a stranger",
+      "e2e-security")
+def s20(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-talk", before=second_pane)
+    shown = phone.expect(r"^Panes: .*test-pane-2", "pane list")
+    check(shown == r"Panes: * test-pane (bash)|* test-pane-2 (bash)|", f"the forged columns left a mark: {shown}")
+    phone.shot("intact")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "the first row opens its pane")
+
+
+def three_panes(core):
+    second_pane(core)
+    core.tmux_cmd("split-window", "-t", "work:0.1", "bash --norc --noprofile")
+    core.tmux_cmd("select-pane", "-t", "work:0.2", "-T", "test-pane-3")
+    core.cli("expose", "--tmux-name", core.tmux, "-t", "work:0.2", "--write")
+
+
+@test("F29", "Panes that talked are framed one under the other, unread mail counted after the name", "e2e-ui")
+def f29(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="talk", before=three_panes)
+    shown = phone.expect(r"^Panes: .*test-pane-3", "pane list")
+    if profile == "midp2":
+        want = "Panes: [* test-pane \u2709 2 (bash)|]* test-pane-3 (bash)| * test-pane-2 (bash)|"
+    else:
+        # The 1.0 build has no room for the frame: the list as always.
+        want = "Panes: * test-pane (bash)|* test-pane-2 (bash)|* test-pane-3 (bash)|"
+    check(shown == want, f"the list reads {shown!r}, want {want!r}")
+    phone.shot("talk")
+
+
+@test("F30", "A row pulled next to its partner opens the pane it names", "e2e-ui", profiles=("midp2",))
+def f30(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="talk", before=three_panes)
+    phone.expect(r"^Panes: \[\* test-pane .*\]\* test-pane-3", "the regrouped list")
+    phone.key("Down")  # the partner, pulled up from the third place
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.2 writable", "the third pane opened")
+    phone.expect(r"^work/0\.2: ", "content")
+    phone.shot("partner")
+
+
 @test("F24", "A pane that waits shows what for after its mark; working clears it", "e2e-ui")
 def f24(run, name, profile):
     def question(core):
@@ -929,7 +971,7 @@ def unit_tests(run, results):
     start = time.time()
     comp = subprocess.run([javac, "-nowarn", "-cp", cp, "-d", str(build), str(root / "src/muxway/Text.java"),
                            str(root / "src/muxway/Api.java"), str(root / "src/muxway/Picture.java"), str(root / "src/muxway/Prefs.java"),
-                           str(root / "src/muxway/Trace.java"), str(root / "src/muxway/Lens.java"),
+                           str(root / "src/muxway/Trace.java"), str(root / "src/muxway/Lens.java"), str(root / "src/muxway/Talk.java"),
                            str(root / "src/muxway/ClaudeCode.java"), str(root / "profiles/midp2/muxway/Ui.java"),
                            str(root / "tests/unit/UnitTest.java")], capture_output=True, text=True)
     out = comp.stdout + comp.stderr
