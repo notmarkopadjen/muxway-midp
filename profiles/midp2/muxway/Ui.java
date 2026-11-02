@@ -13,6 +13,9 @@ final class Ui {
     // The inbox of what waits across hosts, and answers to a question's choices.
     static final boolean INBOX = true;
 
+    // Talk groups and mail counts from the listing's two trailing columns.
+    static final boolean TALK = true;
+
     private Ui() {
     }
 }

@@ -7,7 +7,8 @@ shows it as the character after the writable mark, `*?build (claude)`
 hosts the question is which one waits, and since when: the hub's
 [inbox](https://github.com/notmarkopadjen/muxway/blob/main/docs/features/inbox.md)
 lists every waiting pane the token may read, oldest first, and this app
-shows it on the MIDP 2.0 build.
+shows it on the MIDP 2.0 build. Who talks with whom, and who holds mail,
+is on the pane list itself (see [the pane view](pane-view.md#the-list)).
 
 ## The screen
 

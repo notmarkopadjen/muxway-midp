@@ -129,7 +129,9 @@ What a relay has to pass, and all the app ever asks for:
   [the inbox](features/inbox.md). No other route: no `/v1/me`, no tree,
   no long-poll or events.
 - Text mode only: `Accept: text/plain`, and the answers are read as
-  `text/plain`.
+  `text/plain`. Of the pane listing's columns the MIDP 2.0 build reads
+  the two trailing ones too, `mail` and `talk`, where the hub writes
+  them; rows without them list as before.
 - Query parameters: `charset=latin1` or `charset=ascii` on `panes` and on a
   pane read when the Text setting is not Unicode; `lines=<n>` and
   `width=400` on a pane read.

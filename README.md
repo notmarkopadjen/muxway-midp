@@ -38,7 +38,9 @@ little, and does it on purpose:
 
 - **List** every pane the token may see, named by what runs in it; `*`
   marks the ones you may type into, and `?` `!` `z` `v` after it what a
-  pane waits for: a question, a permission, idle, done.
+  pane waits for: a question, a permission, idle, done. On the MIDP 2.0
+  build, panes that talk to each other are framed one under the other
+  (`[` `]` at the edge) and unread mail is counted after the name (`✉ 2`).
 - **Read** a pane, wrapped to the whole screen, refreshed on a timer or
   with a key; the phone asks the hub for Latin-1 so a phone of that age
   can draw it.
