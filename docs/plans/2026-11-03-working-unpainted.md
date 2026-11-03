@@ -1,6 +1,6 @@
 # Feature: a working pane unpainted on the keypad
 
-> Status: proposed 2026-11-03. Parity with the core's "Focus marks on
+> Status: approved 2026-11-03, implemented the same day. Parity with the core's "Focus marks on
 > the strip and the tile header, and a working pane unpainted"
 > (guideline §1.2 and §1.5, the owner's decision of 2026-11-02); the
 > issue here is #31.
@@ -117,11 +117,17 @@ keypad, as there is one for the glasses' `mail n`.
 
 ## Review (after implementation)
 
-- [ ] Diff matches the plan, deviations explained here
-- [ ] Security rules (AGENTS.md section 2) hold
-- [ ] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
-- [ ] Docs and diagrams updated
+- [x] Diff matches the plan, deviations explained here
+- [x] Security rules (AGENTS.md section 2) hold
+- [x] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
+- [x] Docs and diagrams updated
+
+Deviations: none. No source file changed; both JARs are the ones
+origin/main builds.
 
 ## Test run
 
-To come.
+Run 20261103-114539-4c78aa5, recorded as [issue #33](https://github.com/notmarkopadjen/muxway-midp/issues/33):
+194 tests passed, none failed, both builds, against the core's `main`
+(a572019). F24's new screenshots, `working-open` on each build, show
+the pane's name alone in the overlay's top row, no mark.
