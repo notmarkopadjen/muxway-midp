@@ -51,6 +51,38 @@ flowchart LR
     A --> M
 ```
 
+### The states
+
+Every client paints a pane with the same three states of the lens (the
+core's [guideline](https://github.com/notmarkopadjen/muxway/blob/main/docs/ui-guideline.md),
+§1.2): **waiting** inverted and pulsing, **working** plain with a
+turning ring and the word (the owner dropped the dim paint on
+2026-11-02), **quiet** plain. The keypad has no paint of its own: the
+list is the phone's own `List`, its labels in the phone's type and
+colours, and the selection is the phone's highlight, so selection is
+never a colour here by construction. What the keypad shows of each
+state:
+
+| State | List row | Pane view |
+|---|---|---|
+| waiting | the kind's character after the write mark, `?` `!` `z` `v`; the [inbox](inbox.md) says what for | drawn as it is; `9` opens the inbox |
+| working | plain: no glyph, no word. The hub's `working` event clears the pane's attention and the listing's `kind` column is empty, and the screen moves | plain |
+| quiet | plain | plain |
+
+A working row therefore looks like a quiet one; the pane's own screen
+tells them apart. A mark for working would need the listing to carry
+the state, which it does not, and a word would cost six of sixteen
+columns: the owner left it out (plan of 2026-11-03).
+
+```mermaid
+stateDiagram-v2
+    [*] --> quiet
+    quiet --> waiting: kind in the listing
+    waiting --> quiet: working event, an answer, or the pane read
+    note right of quiet: row plain, working looks like quiet
+    note right of waiting: the kind's character after the mark
+```
+
 ## The screen
 
 <img src="../images/photo-pane.jpg" alt="A Nokia 6310i showing a pane's text wrapped over the whole screen" width="226">
