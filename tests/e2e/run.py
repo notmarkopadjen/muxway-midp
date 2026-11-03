@@ -876,7 +876,7 @@ def f30(run, name, profile):
     phone.shot("partner")
 
 
-@test("F24", "A pane that waits shows what for after its mark; working clears it", "e2e-ui")
+@test("F24", "A pane that waits shows what for after its mark; working clears it and the pane opens plain", "e2e-ui")
 def f24(run, name, profile):
     def question(core):
         core.notify("question", "deploy?")
@@ -893,6 +893,13 @@ def f24(run, name, profile):
     phone.click("right")
     phone.expect(r"^Panes: \* test-pane \(bash\)", "cleared", after=2)
     phone.shot("cleared")
+    # A working pane is plain on the keypad: no glyph, no word, no paint (guideline 1.2).
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "the working pane opens")
+    phone.click("pound")
+    phone.expect(r"^Info on", "overlay on the working pane")
+    time.sleep(1)
+    phone.shot("working-open")
 
 
 @test("F26", "The inbox lists what waits, oldest first; a row without choices opens its pane", "e2e-ui",
