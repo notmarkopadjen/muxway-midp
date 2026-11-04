@@ -22,6 +22,18 @@ final class Ui {
     // The folder and the status after the name, from the listing's last two columns.
     static final boolean NAMES = true;
 
+    // Messages from the feed, a pane's mail and mailing it.
+    static final boolean MAIL = true;
+
+    // A line per host with its flags, Auto on the list, + session, + pane and Close.
+    static final boolean HOSTS = true;
+
+    // The pane canvas in amber, green or paper.
+    static final boolean THEME = true;
+
+    // The Commands list: a program's starters, sent with Enter.
+    static final boolean COMMANDS = true;
+
     private Ui() {
     }
 }

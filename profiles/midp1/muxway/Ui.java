@@ -22,6 +22,18 @@ final class Ui {
     // The folder and the status after the name: columns the 96x65 row has no room for.
     static final boolean NAMES = false;
 
+    // Messages and mail: two screens and their parsers, far over the cap.
+    static final boolean MAIL = false;
+
+    // Host lines and the writes that need the hosts' flags: the same.
+    static final boolean HOSTS = false;
+
+    // The screen is monochrome: black on white stays.
+    static final boolean THEME = false;
+
+    // The Commands list: fifty strings the cap has no room for.
+    static final boolean COMMANDS = false;
+
     private Ui() {
     }
 }

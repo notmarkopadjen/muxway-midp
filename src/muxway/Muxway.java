@@ -21,7 +21,8 @@ import javax.microedition.midlet.MIDlet;
 /** muxway for Java ME phones: pick a pane, read it, reply, send a key. */
 public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private static final int LIST = 1, OPEN = 2, REFRESH = 3, POLL = 4, SEND = 5, TYPE = 6, KEY = 7, PROBE = 8, UPLOAD = 9,
-        INBOX = 10, ANSWER = 11, LATER = 12;
+        INBOX = 10, ANSWER = 11, LATER = 12, LISTQ = 13, SESSION = 14, TALK = 15, MAIL = 16, MAILTO = 17, SPLIT = 18,
+        CLOSE = 19;
 
     // Labels on the phone, names in the protocol.
     private static final String[][] KEYS = {
@@ -49,9 +50,12 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final TextField refresh = new TextField("Auto refresh, s", "", 3, TextField.NUMERIC);
     private final ChoiceGroup textChoice = new ChoiceGroup("Text", ChoiceGroup.EXCLUSIVE,
         new String[] {"Unicode", "Latin-1", "ASCII"}, null);
+    // The pane canvas's colours; MIDP 2.0 build only.
+    private ChoiceGroup themeChoice;
     private final StringItem help = new StringItem("Keys",
-        "1 refresh, 2/8 scroll, " + (Files.ANY ? "3 image, " : "") + "5 reply, " + (Ui.INBOX ? "9 inbox, " : "")
-            + "0 keys, # title and position, * hidden rows, call key Enter");
+        "1 refresh, 2/8 scroll, " + (Files.ANY ? "3 image, " : "") + "5 reply, " + (Ui.MAIL ? "7 messages, " : "")
+            + (Ui.INBOX ? "9 inbox, " : "") + "0 keys, # title and position, * hidden rows, call key Enter"
+            + (Ui.HOSTS ? ", left/right previous and next pane" : ""));
 
     // One pane's own view, picked from a list reached from its menu; made
     // afresh for each pane, since MIDP 1.0 cannot retitle a screen.
@@ -62,8 +66,30 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Vector names = new Vector();
     private final Vector commands = new Vector();
     private final Vector writable = new Vector();
+    // The kind's mark of each pane, as the list drew it; the overlay shows it. MIDP 2.0 build only.
+    private Vector marks;
     // Whether each row's pane is parked for later; MIDP 2.0 build only.
     private Vector later;
+    // The hosts, their flags and what each list row is; MIDP 2.0 build only.
+    private Hosts hosts;
+    // Messages and a pane's mail; MIDP 2.0 build only.
+    private Mail mail;
+    private Command messagesCmd;
+    private Command mailCmd;
+    // The Commands list and the program's entries in it; MIDP 2.0 build only.
+    private Command commandsCmd;
+    private List cmdList;
+    private String[] cmdEntries;
+    // + session and + pane on the list's menu, Close on the pane's, each behind a box or a confirm
+    // list; MIDP 2.0 build only.
+    private Command sessionCmd;
+    private Command splitCmd;
+    private Command closeCmd;
+    private List confirm;
+    private int confirming;
+    // The pane whose window + pane splits, and the pane a job wants opened once it is done.
+    private String splitting;
+    private int openNext = -1;
     private PaneView view;
     private final TextBox reply = new TextBox("Reply", "", 500, TextField.ANY);
     private final List keys = new List("Keys", List.IMPLICIT);
@@ -101,6 +127,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private int serial;
     private boolean auto;
     private int pollSerial;
+    // The list re-read on the timer while it is shown; MIDP 2.0 build only.
+    private boolean listAuto;
+    private int listPollSerial;
 
     public Muxway() {
         setup.append(server);
@@ -108,6 +137,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         setup.append(width);
         setup.append(refresh);
         setup.append(textChoice);
+        if (Ui.THEME) {
+            themeChoice = new ChoiceGroup("Theme", ChoiceGroup.EXCLUSIVE, Theme.NAMES, null);
+            setup.append(themeChoice);
+        }
         setup.append(help);
         setup.addCommand(ok);
         setup.addCommand(exit);
@@ -116,12 +149,42 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         if (Ui.INBOX) {
             panes.addCommand(inboxCmd);
         }
+        if (Ui.NAMES) {
+            marks = new Vector();
+        }
         if (Ui.LATER) {
             later = new Vector();
             laterCmd = new Command("Later", Command.SCREEN, 5);
             wakeCmd = new Command("Wake", Command.SCREEN, 5);
         }
+        if (Ui.HOSTS) {
+            hosts = new Hosts();
+            hosts.box.addCommand(hosts.start);
+            hosts.box.addCommand(back);
+            hosts.box.setCommandListener(this);
+            sessionCmd = new Command("+ session", Command.SCREEN, 7);
+            splitCmd = new Command("+ pane", Command.SCREEN, 7);
+            closeCmd = new Command("Close", Command.SCREEN, 8);
+            confirm = new List("", List.IMPLICIT);
+            confirm.addCommand(back);
+            confirm.setCommandListener(this);
+        }
+        if (Ui.MAIL) {
+            messagesCmd = new Command("Messages", Command.SCREEN, 4);
+            mailCmd = new Command("Mail", Command.SCREEN, 4);
+            panes.addCommand(messagesCmd);
+        }
+        if (Ui.COMMANDS) {
+            // Before Pane and Later, so Wake, re-added while parked, keeps Later's place on the menu.
+            commandsCmd = new Command("Commands", Command.SCREEN, 4);
+            cmdList = new List("Commands", List.IMPLICIT);
+            cmdList.addCommand(back);
+            cmdList.setCommandListener(this);
+        }
         panes.addCommand(refreshCmd);
+        if (Ui.HOSTS) {
+            panes.addCommand(autoCmd);
+        }
         panes.addCommand(settings);
         panes.addCommand(exit);
         panes.setCommandListener(this);
@@ -151,6 +214,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         files = new Files(this, display);
         if (Ui.INBOX) {
             inbox = new Inbox(this, display);
+        }
+        if (Ui.MAIL) {
+            mail = new Mail(this, display);
         }
         String version = getAppProperty("MIDlet-Version");
         api = new Api(prefs, "muxway-midp/" + (version == null ? "?" : version) + " " + Ui.PROFILE);
@@ -195,14 +261,23 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
     protected void destroyApp(boolean unconditional) {
         auto = false;
+        if (Ui.HOSTS) {
+            listAuto = false;
+        }
     }
 
     public void commandAction(Command c, Displayable d) {
         if (c == exit) {
             auto = false;
+            if (Ui.HOSTS) {
+                listAuto = false;
+            }
             notifyDestroyed();
         } else if (c == settings) {
             auto = false;
+            if (Ui.HOSTS) {
+                listAuto = false;
+            }
             showSetup();
         } else if (d == setup && c == ok) {
             saveSetup();
@@ -221,11 +296,91 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             display.setCurrent(view);
         } else if (d == panes && c == List.SELECT_COMMAND) {
             int i = panes.getSelectedIndex();
+            if (Ui.HOSTS) {
+                i = hosts.at(i);
+            }
             if (i >= 0 && i < addresses.size()) {
                 open(i);
             }
+        } else if (Ui.HOSTS && d == panes && c == sessionCmd) {
+            // On the host of the row under the cursor, where its flags allow it.
+            int h = hostAt(panes.getSelectedIndex());
+            if (h >= 0 && hosts.flag(h, "sessions")) {
+                hosts.session = (String) hosts.names.elementAt(h);
+                hosts.box.setTitle("Session on " + hosts.session);
+                hosts.box.setString("");
+                Trace.show("Session " + hosts.session);
+                display.setCurrent(hosts.box);
+            } else {
+                alert("This host does not start sessions.", panes);
+            }
+        } else if (Ui.HOSTS && d == panes && c == splitCmd) {
+            int i = hosts.at(panes.getSelectedIndex());
+            if (i >= 0 && i < addresses.size() && ((Boolean) writable.elementAt(i)).booleanValue()) {
+                splitting = (String) addresses.elementAt(i);
+                confirming = SPLIT;
+                ask("New pane beside " + names.elementAt(i) + "?", new String[] {"Beside", "Below", "Cancel"});
+            } else {
+                alert("Pick a writable pane first.", panes);
+            }
+        } else if (Ui.HOSTS && d == hosts.box && c == hosts.start) {
+            String name = hosts.box.getString().trim();
+            if (!Text.session(name)) {
+                alert("A name is a-z, 0-9, - and _, up to 32.", hosts.box);
+                return;
+            }
+            display.setCurrent(panes);
+            start(SESSION, name);
+        } else if (Ui.HOSTS && d == hosts.box && c == back) {
+            display.setCurrent(panes);
+        } else if (Ui.MAIL && d == panes && c == messagesCmd) {
+            messages(panes);
+        } else if (Ui.MAIL && d == view && c == mailCmd) {
+            mail(view.address, view);
+        } else if (Ui.COMMANDS && d == view && c == commandsCmd) {
+            for (int i = cmdList.size() - 1; i >= 0; i--) {
+                cmdList.delete(i);
+            }
+            for (int i = 0; cmdEntries != null && i < cmdEntries.length; i++) {
+                cmdList.append(cmdEntries[i], null);
+            }
+            Trace.show("Commands " + (cmdEntries == null ? 0 : cmdEntries.length));
+            display.setCurrent(cmdList);
+        } else if (Ui.COMMANDS && d == cmdList && c == List.SELECT_COMMAND) {
+            int i = cmdList.getSelectedIndex();
+            if (i < 0 || cmdEntries == null || i >= cmdEntries.length) {
+                return;
+            }
+            String text = cmdEntries[i];
+            if (text.equals("/rename")) {
+                // Waits for the name, as on the web.
+                reply.setString(text + " ");
+                Trace.show("Reply");
+                display.setCurrent(reply);
+            } else {
+                display.setCurrent(view);
+                start(SEND, text);
+            }
+        } else if (Ui.HOSTS && d == view && c == closeCmd) {
+            confirming = CLOSE;
+            ask("Close the pane on " + hostOf(view.address) + "? What runs in it ends; a session ends with its last pane.",
+                new String[] {"Close", "Keep"});
+        } else if (Ui.HOSTS && d == confirm && (c == List.SELECT_COMMAND || c == back)) {
+            int i = c == back ? -1 : confirm.getSelectedIndex();
+            display.setCurrent(confirming == CLOSE ? (Displayable) view : panes);
+            if (confirming == SPLIT && i >= 0 && i < 2) {
+                start(SPLIT, i == 0 ? "h" : "v");
+            } else if (confirming == CLOSE && i == 0) {
+                start(CLOSE, null);
+            }
         } else if (d == panes && c == refreshCmd) {
             start(LIST, null);
+        } else if (Ui.HOSTS && d == panes && c == autoCmd) {
+            listAuto = !listAuto;
+            alert(listAuto ? "Auto refresh every " + interval() + " s." : "Auto refresh off.", panes);
+            if (listAuto) {
+                pollList();
+            }
         } else if (Ui.INBOX && c == inboxCmd) {
             inbox(panes);
         } else if (d == view && c == back) {
@@ -278,6 +433,15 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             start(REFRESH, null);
         } else if (Ui.INBOX && what == PaneView.INBOX) {
             inbox(view);
+        } else if (Ui.MAIL && what == PaneView.MESSAGES) {
+            messages(view);
+        } else if (what == PaneView.PREVIOUS || what == PaneView.NEXT) {
+            // The list's neighbour, round at either end.
+            int i = addresses.indexOf(view.address);
+            int n = addresses.size();
+            if (i >= 0 && n > 1) {
+                open((i + (what == PaneView.NEXT ? 1 : n - 1)) % n);
+            }
         } else if (what == PaneView.IMAGE) {
             // The 1.0 build compiles none of this: Files.ANY is a constant there.
             if (Files.ANY && view != null && view.writable) {
@@ -304,6 +468,49 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     /** Sends the choice the inbox picked for its row. */
     void answer() {
         start(ANSWER, null);
+    }
+
+    /** Reads the feed; Back on Messages returns to from. MIDP 2.0 build only. */
+    void messages(Displayable from) {
+        mail.from = from;
+        start(TALK, null);
+    }
+
+    /** Reads a pane's mail; Back on the list returns to where. A pane the list does not know is not read. */
+    void mail(String address, Displayable where) {
+        int i = addresses.indexOf(address);
+        if (i < 0) {
+            return;
+        }
+        mail.address = address;
+        mail.name = (String) names.elementAt(i);
+        mail.writable = ((Boolean) writable.elementAt(i)).booleanValue();
+        mail.to = where;
+        start(MAIL, null);
+    }
+
+    /** Posts the box's text to the pane it is aimed at. */
+    void mailTo(String text) {
+        start(MAILTO, text);
+    }
+
+    /** The list's name for a pane it holds. */
+    String nameOf(String address) {
+        int i = addresses.indexOf(address);
+        return i >= 0 ? (String) names.elementAt(i) : address;
+    }
+
+    /** A question with its answers as a list; the pick comes back through confirming. MIDP 2.0 build only. */
+    private void ask(String question, String[] answers) {
+        confirm.setTitle(question);
+        for (int i = confirm.size() - 1; i >= 0; i--) {
+            confirm.delete(i);
+        }
+        for (int i = 0; i < answers.length; i++) {
+            confirm.append(answers[i], null);
+        }
+        Trace.show("Confirm " + question);
+        display.setCurrent(confirm);
     }
 
     /** Opens a pane the inbox named; one the pane list does not know yet means the list is stale. */
@@ -344,6 +551,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         prefs.width = Math.max(0, Math.min(400, Text.toInt(width.getString(), 0)));
         prefs.refresh = Math.max(0, Math.min(600, Text.toInt(refresh.getString(), 0)));
         prefs.text = textChoice.getSelectedIndex();
+        if (Ui.THEME) {
+            prefs.theme = themeChoice.getSelectedIndex();
+            Trace.show("Theme " + prefs.theme);
+        }
         prefs.save();
         if (open) {
             alert("Unencrypted: the token travels in the clear. Use a relay and a token scoped to this phone (docs/features/relay.md).", setup);
@@ -374,6 +585,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         width.setString(Integer.toString(prefs.width));
         refresh.setString(Integer.toString(prefs.refresh));
         textChoice.setSelectedIndex(prefs.text, true);
+        if (Ui.THEME) {
+            themeChoice.setSelectedIndex(prefs.theme, true);
+        }
     }
 
     /** Auto, Plain, then every lens by name. */
@@ -391,11 +605,18 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         String address = (String) addresses.elementAt(i);
         boolean canWrite = ((Boolean) writable.elementAt(i)).booleanValue();
         view = new PaneView(frames, this);
+        if (Ui.THEME) {
+            view.theme = new Theme(prefs.theme);
+            Trace.show("Theme " + prefs.theme);
+        }
         view.address = address;
         view.title = address.substring(address.indexOf('/') + 1);
         view.name = (String) names.elementAt(i);
         view.command = (String) commands.elementAt(i);
         view.writable = canWrite;
+        if (Ui.NAMES) {
+            view.mark = (String) marks.elementAt(i);
+        }
         if (Ui.LATER) {
             view.later = ((Boolean) later.elementAt(i)).booleanValue();
         }
@@ -411,18 +632,36 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         view.addCommand(refreshCmd);
         view.addCommand(autoCmd);
+        if (Ui.MAIL && hostHas(address, "mail")) {
+            view.addCommand(mailCmd);
+        }
         view.addCommand(paneCmd);
         if (Ui.LATER && canWrite) {
             view.addCommand(view.later ? wakeCmd : laterCmd);
         }
+        if (Ui.COMMANDS && canWrite) {
+            cmdEntries = Commands.of(view.command, view.mode == 2);
+            if (cmdEntries != null) {
+                view.addCommand(commandsCmd);
+            }
+        }
         view.addCommand(back);
         view.addCommand(settings);
+        if (Ui.HOSTS && canWrite && hosts.flag(hosts.names.indexOf(hostOf(address)), "close")) {
+            view.addCommand(closeCmd);
+        }
         view.addCommand(exit);
         view.setCommandListener(this);
         auto = false;
         Trace.show("View " + address + (canWrite ? " writable" : " read-only"));
         display.setCurrent(view);
         start(OPEN, null);
+    }
+
+    /** True when the host's flags say so, or say nothing at all (a hub older than the column). MIDP 2.0 build only. */
+    private boolean hostHas(String address, String word) {
+        int h = hosts.names.indexOf(hostOf(address));
+        return h < 0 || ((String) hosts.flags.elementAt(h)).trim().length() == 0 || hosts.flag(h, word);
     }
 
     private int interval() {
@@ -436,7 +675,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
      */
     private synchronized boolean start(int what, String with) {
         if (busy) {
-            if (what != POLL) {
+            if (what != POLL && (!Ui.HOSTS || what != LISTQ)) {
                 alert("Still waiting for the last answer.", display.getCurrent());
             }
             return false;
@@ -445,11 +684,26 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         job = what;
         arg = with;
         final int mine = ++serial;
-        if (what == LIST || (Ui.INBOX && what == INBOX)) {
-            waitNote.setText(Ui.INBOX && what == INBOX ? "Loading inbox..." : "Loading panes...");
+        // The reads that have no screen yet show the wait form; the rest turn the mark on the pane, a poll nothing.
+        boolean form = what == LIST;
+        String note = "Loading panes...";
+        if (Ui.INBOX && what == INBOX) {
+            form = true;
+            note = "Loading inbox...";
+        }
+        if (Ui.MAIL && (what == TALK || what == MAIL || what == MAILTO)) {
+            form = true;
+            note = what == TALK ? "Loading messages..." : what == MAILTO ? "Sending mail..." : "Loading mail...";
+        }
+        if (form) {
+            waitNote.setText(note);
             display.setCurrent(wait);
         }
-        spin(what, mine, what == UPLOAD ? UPLOAD_TIMEOUT : TIMEOUT);
+        int where = form ? 0 : what == POLL ? 2 : 1;
+        if (Ui.HOSTS && what == LISTQ) {
+            where = 2;
+        }
+        spin(where, mine, what == UPLOAD ? UPLOAD_TIMEOUT : TIMEOUT);
         new Thread(this).start();
         return true;
     }
@@ -458,11 +712,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         if (busy && serial == which) {
             busy = false;
             serial++;
-            Displayable next = job == LIST ? (Displayable) setup : view;
-            if (Ui.INBOX && (job == INBOX || job == ANSWER)) {
-                next = inbox.from;
-            }
-            alert("No answer from the server.", next);
+            alert("No answer from the server.", where());
         }
     }
 
@@ -477,15 +727,19 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
     }
 
-    /** Turns the wait mark while the job runs, and gives the job up once it has run for patience. */
-    private void spin(final int what, final int mine, final long patience) {
+    /**
+     * Turns the wait mark while the job runs (where: 0 the wait form's bar,
+     * 1 the pane's corner, 2 nowhere), and gives the job up once it has run
+     * for patience.
+     */
+    private void spin(final int where, final int mine, final long patience) {
         new Thread() {
             public void run() {
                 int step = 0;
                 while (busy) {
-                    if (what == LIST && frames != null) {
+                    if (where == 0 && frames != null) {
                         waitBar.setImage(frames[step % frames.length]);
-                    } else if (what != LIST && what != POLL && (!Ui.INBOX || what != INBOX) && view != null) {
+                    } else if (where == 1 && view != null) {
                         view.busy(step);
                     }
                     step++;
@@ -570,6 +824,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                     later(!view.later);
                 }
                 break;
+            default:
+                if (Ui.HOSTS || Ui.MAIL) {
+                    more();
+                }
             }
         } catch (IOException e) {
             if (current(mine)) {
@@ -583,16 +841,28 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         } finally {
             finish(mine);
         }
+        if (Ui.HOSTS && openNext >= 0) {
+            // A pane a job just made: opened after the job, since a job runs alone.
+            int i = openNext;
+            openNext = -1;
+            open(i);
+        }
     }
 
     private String etag = "";
 
     private void list() throws IOException {
+        // The hosts first on the 2.0 build: their lines head the rows.
+        String hostRows = null;
+        if (Ui.HOSTS && api.call("hosts", null, null) == 200) {
+            hostRows = api.body;
+        }
         if (api.call("panes" + (charset().length() > 0 ? "?" + charset() : ""), null, null) != 200) {
             problem(api.status);
             return;
         }
         String[] rows = Text.split(api.body, '\n');
+        String keep = Ui.HOSTS ? selected() : null;
         for (int i = panes.size() - 1; i >= 0; i--) {
             panes.delete(i);
         }
@@ -600,13 +870,16 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         names.removeAllElements();
         commands.removeAllElements();
         writable.removeAllElements();
+        if (Ui.NAMES) {
+            marks.removeAllElements();
+        }
         if (Ui.LATER) {
             later.removeAllElements();
         }
-        // Hosts are named in the list only when there is more than one.
+        // Hosts are named in the row only when there is more than one and no host lines.
         String host = null;
         boolean several = false;
-        for (int i = 0; i < rows.length; i++) {
+        for (int i = 0; i < rows.length && !Ui.HOSTS; i++) {
             int slash = rows[i].indexOf('/');
             int tab = rows[i].indexOf('\t');
             if (slash > 0 && tab > slash) {
@@ -626,13 +899,15 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             }
             // The mark comes from the hub's mode column, never from the title.
             boolean w = f[1].equals("write");
-            // The unread mail after the name, from the sixth column where the hub sends one.
-            String name = Text.label(f, several, Ui.TALK && f.length > 5 ? Text.mail(f[5], prefs.text == 0) : "",
-                prefs.text != 2);
-            // Then what the pane waits for, from the kind column: ? ! z v, zz for a parked pane.
+            // The name, and the row with the unread mail after it, from the sixth column where the hub sends one.
+            String name = Text.label(f, several, "", prefs.text != 2);
+            String count = Ui.TALK && f.length > 5 ? Text.mail(f[5], prefs.text == 0) : "";
+            String row = Ui.TALK && count.length() > 0 ? Text.label(f, several, count, prefs.text != 2) : name;
+            // Then what the pane waits for, from the kind column: ? ! z v, zz for a parked pane,
+            // and after zz what waits underneath, from the pending column.
             String kind = f.length > 4 ? f[4].trim() : "";
-            String mark = Text.mark(kind);
-            String label = (w ? "*" : " ") + mark + (mark.length() > 1 ? " " : "") + name;
+            String mark = Ui.NAMES ? Text.marks(kind, f.length > 9 ? f[9].trim() : "") : Text.mark(kind);
+            String label = (w ? "*" : " ") + mark + (mark.length() > 1 ? " " : "") + row;
             if (Ui.TALK) {
                 labels.addElement(label);
                 talk.addElement(f.length > 6 ? f[6] : "");
@@ -644,18 +919,21 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             names.addElement(name);
             commands.addElement(f[2].trim());
             writable.addElement(new Boolean(w));
+            if (Ui.NAMES) {
+                marks.addElement(mark);
+            }
             if (Ui.LATER) {
                 later.addElement(new Boolean(kind.equals("later")));
             }
         }
-        if (Ui.TALK) {
-            arrange(labels, talk, shown);
-        }
-        if (api.call("hosts", null, null) == 200) {
-            String[] hosts = Text.split(api.body, '\n');
-            for (int i = 0; i < hosts.length; i++) {
-                String[] f = Text.split(hosts[i], '\t');
-                if (f.length == 2 && f[1].equals("offline")) {
+        if (Ui.HOSTS) {
+            fill(hostRows, labels, talk, shown);
+            reselect(keep);
+        } else if (api.call("hosts", null, null) == 200) {
+            String[] lines = Text.split(api.body, '\n');
+            for (int i = 0; i < lines.length; i++) {
+                String[] f = Text.split(lines[i], '\t');
+                if (f.length >= 2 && f[1].equals("offline")) {
                     String label = "- " + f[0] + " offline";
                     panes.append(label, null);
                     shown.append(label).append('\n');
@@ -666,32 +944,110 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             panes.append("No panes. Expose one on a host.", null);
         }
         Trace.show("Panes: " + shown.toString());
-        display.setCurrent(panes);
+        // A quiet re-read leaves a screen opened meanwhile alone.
+        if (!Ui.HOSTS || job == LIST || display.getCurrent() == panes) {
+            display.setCurrent(panes);
+        }
     }
 
     /**
-     * Fills the list from the labels, a group's rows together behind the
-     * frame's edge, and puts the parallel Vectors in the same order so a
+     * Fills the list host by host from the hosts call (name, state, flags;
+     * a host the rows name that the call did not is online): a line per
+     * host, then its rows, a group's rows together within the host behind
+     * the frame's edge, and the parallel Vectors in the same order so a
      * select opens the row it names. MIDP 2.0 build only.
      */
-    private void arrange(Vector labels, Vector talk, StringBuffer shown) {
+    private void fill(String body, Vector labels, Vector talk, StringBuffer shown) {
+        hosts.read(body);
+        int n = addresses.size();
+        for (int i = 0; i < n; i++) {
+            hosts.add(hostOf((String) addresses.elementAt(i)));
+        }
         int[] group = Talk.groups(addresses, talk);
-        int[] order = Talk.order(group);
         boolean framed = Talk.any(group);
-        Vector[] kept = {addresses, names, commands, writable, later};
+        Vector[] kept = {addresses, names, commands, writable, later, marks};
         Object[][] was = new Object[kept.length][];
         for (int k = 0; k < kept.length; k++) {
             was[k] = new Object[kept[k].size()];
             kept[k].copyInto(was[k]);
             kept[k].removeAllElements();
         }
-        for (int p = 0; p < order.length; p++) {
-            int i = order[p];
-            String label = (framed ? String.valueOf(Talk.edge(group, order, p)) : "") + (String) labels.elementAt(i);
-            panes.append(label, null);
-            shown.append(label).append('\n');
-            for (int k = 0; k < kept.length; k++) {
-                kept[k].addElement(was[k][i]);
+        int first = -1;
+        boolean sessions = false, writes = false;
+        for (int h = 0; h < hosts.names.size(); h++) {
+            String name = (String) hosts.names.elementAt(h);
+            int[] member = new int[n];
+            int m = 0;
+            for (int i = 0; i < n; i++) {
+                if (hostOf((String) was[0][i]).equals(name)) {
+                    member[m++] = i;
+                }
+            }
+            String state = !((Boolean) hosts.online.elementAt(h)).booleanValue() ? "offline" : m > 0 ? "online" : "nothing exposed";
+            String line = "= " + name + " " + state;
+            panes.append(line, null);
+            sessions |= hosts.flag(h, "sessions");
+            shown.append(line).append('\n');
+            hosts.rows.addElement(new Integer(-1 - h));
+            int[] sub = new int[m];
+            for (int p = 0; p < m; p++) {
+                sub[p] = group[member[p]];
+            }
+            int[] order = Talk.order(sub);
+            for (int p = 0; p < m; p++) {
+                int i = member[order[p]];
+                String label = (framed ? String.valueOf(Talk.edge(sub, order, p)) : "") + (String) labels.elementAt(i);
+                panes.append(label, null);
+                shown.append(label).append('\n');
+                if (first < 0) {
+                    first = panes.size() - 1;
+                }
+                hosts.rows.addElement(new Integer(addresses.size()));
+                for (int k = 0; k < kept.length; k++) {
+                    kept[k].addElement(was[k][i]);
+                }
+                writes |= ((Boolean) was[3][i]).booleanValue();
+            }
+        }
+        if (first >= 0) {
+            panes.setSelectedIndex(first, true);
+        }
+        // The menu offers what some host or row allows; the pick says when the one chosen does not.
+        panes.removeCommand(sessionCmd);
+        panes.removeCommand(splitCmd);
+        if (sessions) {
+            panes.addCommand(sessionCmd);
+        }
+        if (writes) {
+            panes.addCommand(splitCmd);
+        }
+    }
+
+    /** The host of list row r: a pane row's, or the line's; -1 for no row. */
+    private int hostAt(int r) {
+        int i = hosts.at(r);
+        if (i == Integer.MIN_VALUE) {
+            return -1;
+        }
+        return i >= 0 ? hosts.names.indexOf(hostOf((String) addresses.elementAt(i))) : -1 - i;
+    }
+
+    private static String hostOf(String address) {
+        return address.substring(0, address.indexOf('/'));
+    }
+
+    /** The pane under the cursor, or the host of its line, so a re-read keeps the place. */
+    private String selected() {
+        int i = hosts.at(panes.getSelectedIndex());
+        return i == Integer.MIN_VALUE ? null : i >= 0 ? (String) addresses.elementAt(i) : (String) hosts.names.elementAt(-1 - i);
+    }
+
+    private void reselect(String keep) {
+        for (int r = 0; keep != null && r < hosts.rows.size(); r++) {
+            int i = hosts.at(r);
+            if (keep.equals(i >= 0 ? addresses.elementAt(i) : hosts.names.elementAt(-1 - i))) {
+                panes.setSelectedIndex(r, true);
+                return;
             }
         }
     }
@@ -725,7 +1081,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             problem(api.status);
             return;
         }
-        inbox.fill(api.body, addresses, names);
+        inbox.fill(api.body, addresses, names, writable);
     }
 
     /** The choice goes to the process that asked; nothing is typed into the pane. */
@@ -768,10 +1124,149 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
     }
 
+    /** Starts a session on the host the line named; its first pane opens from the re-read list. */
+    private void session() throws IOException {
+        int status = api.call("hosts/" + hosts.session + "/sessions", Api.json("name", arg), null);
+        Trace.show("Session " + status);
+        if (status == 404) {
+            alert("This host does not start sessions.", panes);
+        } else if (status == 409) {
+            alert("exists".equals(Text.jsonString(api.body, "error")) ? "That name exists." : "Too many sessions.", panes);
+        } else if (status != 201) {
+            problem(status);
+        } else {
+            opened(api.body);
+        }
+    }
+
+    /** The jobs of the 2.0 build's screens: the list's timer, sessions, messages, mail, splits and closes. */
+    private void more() throws IOException {
+        switch (job) {
+        case LISTQ:
+            list();
+            break;
+        case SESSION:
+            session();
+            break;
+        case TALK:
+            readMessages();
+            break;
+        case MAIL:
+            readMail();
+            break;
+        case MAILTO:
+            sendMail();
+            break;
+        case SPLIT:
+            split();
+            break;
+        case CLOSE:
+            close();
+            break;
+        }
+    }
+
+    private void readMessages() throws IOException {
+        if (api.call("talk?limit=100", null, null) != 200) {
+            problem(api.status);
+            return;
+        }
+        mail.unicode = prefs.text == 0;
+        mail.fillMessages(api.body, addresses, names);
+    }
+
+    /** The pane's mailbox, then the feed for what it sent; a host without mail says so. */
+    private void readMail() throws IOException {
+        int status = api.call("panes/" + mail.address + "/mail" + (charset().length() > 0 ? "?" + charset() : ""), null, null);
+        if (status == 404) {
+            alert("This host holds no mail.", mail.to);
+            return;
+        }
+        if (status != 200) {
+            problem(status);
+            return;
+        }
+        String mailbox = api.body;
+        String feed = api.call("talk?limit=100", null, null) == 200 ? api.body : "";
+        mail.unicode = prefs.text == 0;
+        mail.fillMail(mailbox, feed, addresses, names, writable);
+    }
+
+    /** The box's text to the pane it is aimed at, as a mail: never typed, and from no pane. */
+    private void sendMail() throws IOException {
+        int status = api.call("panes/" + mail.target + "/mail", Api.json("text", arg), null);
+        Trace.show("Mailed " + mail.target + " " + status);
+        if (status == 201) {
+            readMail();
+            alert("Mailed.", mail.list);
+        } else if (status == 404) {
+            alert("This host holds no mail.", mail.list);
+        } else if (status == 409) {
+            alert("The mailbox is full.", mail.list);
+        } else {
+            problem(status);
+        }
+    }
+
+    /** One more pane in the chosen pane's window, beside or below; the new pane opens from the re-read list. */
+    private void split() throws IOException {
+        String a = splitting;
+        String rest = a.substring(a.indexOf('/') + 1);
+        int dot = rest.lastIndexOf('.');
+        if (dot < 0) {
+            alert("Not a window.", panes);
+            return;
+        }
+        int status = api.call("windows/" + hostOf(a) + "/" + rest.substring(0, dot) + "/panes", "{\"direction\":\"" + arg + "\"}", null);
+        Trace.show("Split " + status);
+        if (status == 201) {
+            opened(api.body);
+        } else if (status == 409) {
+            alert("The window is full.", panes);
+        } else {
+            problem(status);
+        }
+    }
+
+    /** Closes the open pane on its host; the list is read again without it. */
+    private void close() throws IOException {
+        int status = api.call("panes/" + view.address + "/close", "{}", null);
+        Trace.show("Close " + status);
+        if (status == 204 || status == 200) {
+            auto = false;
+            display.setCurrent(panes);
+            list();
+        } else if (status == 404) {
+            alert("This host does not close panes.", view);
+        } else {
+            problem(status);
+        }
+    }
+
+    /** A pane the hub just made, named in its JSON answer: the list is read again and the pane opened. */
+    private void opened(String body) throws IOException {
+        String address = Text.jsonString(body, "address");
+        list();
+        if (address != null && Text.address(address) && addresses.indexOf(address) >= 0) {
+            // The cursor moves to it, so the list's next action is on the pane just made.
+            reselect(address);
+            openNext = addresses.indexOf(address);
+        }
+    }
+
     private void parked(boolean on) {
         view.later = on;
         view.removeCommand(on ? laterCmd : wakeCmd);
         view.addCommand(on ? wakeCmd : laterCmd);
+        if (Ui.NAMES) {
+            // The overlay's mark follows: what waited stays under zz, and comes back when woken.
+            String m = view.mark.trim();
+            if (on && !m.startsWith("zz")) {
+                view.mark = "zz" + (m.length() > 0 ? " " + m : "");
+            } else if (!on && m.startsWith("zz")) {
+                view.mark = m.length() > 3 ? m.substring(3) : " ";
+            }
+        }
     }
 
     private boolean input(String json) throws IOException {
@@ -856,6 +1351,25 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }.start();
     }
 
+    /** Re-reads the list every interval while Auto is on there and it is the screen shown. MIDP 2.0 build only. */
+    private void pollList() {
+        final int serial = ++listPollSerial;
+        new Thread() {
+            public void run() {
+                while (listAuto && serial == listPollSerial) {
+                    try {
+                        Thread.sleep(interval() * 1000L);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                    if (listAuto && serial == listPollSerial && display.getCurrent() == panes) {
+                        Muxway.this.start(LISTQ, null);
+                    }
+                }
+            }
+        }.start();
+    }
+
     private void problem(int status) {
         if (status == 401) {
             auto = false;
@@ -866,6 +1380,12 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             return;
         }
         Displayable next = view != null && display.getCurrent() != panes && job != LIST ? (Displayable) view : panes;
+        if (Ui.HOSTS && (job == LISTQ || job == SESSION || job == SPLIT)) {
+            next = panes;
+        }
+        if (Ui.MAIL && (job == TALK || job == MAIL || job == MAILTO)) {
+            next = where();
+        }
         if (job == LIST && panes.size() == 0) {
             next = setup;
         }
@@ -875,11 +1395,23 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         alert(Api.problem(status), next);
     }
 
-    private void fail(String message) {
+    /** The screen a job that got no answer returns to. */
+    private Displayable where() {
         Displayable next = job == LIST ? (Displayable) setup : view;
-        if (next == null) {
-            next = setup;
+        if (Ui.INBOX && (job == INBOX || job == ANSWER)) {
+            next = inbox.from;
         }
+        if (Ui.HOSTS && (job == LISTQ || job == SESSION || job == SPLIT)) {
+            next = panes;
+        }
+        if (Ui.MAIL && (job == TALK || job == MAIL || job == MAILTO)) {
+            next = job == TALK ? mail.from : job == MAIL ? mail.to : mail.list;
+        }
+        return next == null ? setup : next;
+    }
+
+    private void fail(String message) {
+        Displayable next = where();
         if (next == setup) {
             fillSetup();
         }

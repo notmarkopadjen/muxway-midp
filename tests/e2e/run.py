@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness  # noqa: E402
-from harness import HOST, Core, Failure, Phone, Relay, check, wait_for  # noqa: E402
+from harness import HOST, PANES_MENU_PLUS, Core, Failure, Phone, Relay, check, wait_for  # noqa: E402
 
 TESTS = []
 
@@ -64,9 +64,10 @@ class Run:
 
 
 def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*", write=f"{HOST}/*",
-          props=None, revoke=False, before=None, says_claude=False, inbox=False, files=None, preview=False):
+          props=None, revoke=False, before=None, says_claude=False, inbox=False, files=None, preview=False,
+          sessions=False, close=False):
     logs = run.logs(name)
-    core = Core(run, run.binary, logs).start(expose=expose, inbox=inbox, preview=preview)
+    core = Core(run, run.binary, logs).start(expose=expose, inbox=inbox, preview=preview, sessions=sessions, close=close)
     run.cleanups.append(core.close)
     tok = core.token(read=read, write=write)
     if revoke:
@@ -133,7 +134,7 @@ def s03(run, name, profile):
 @test("S04", "Read-only pane: no Reply; a relay that lies about it gets Read only", "e2e-security")
 def s04(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, expose=None, mode="lie-writable")
-    phone.expect(r"^Panes: \* ", "the lying relay's list")
+    phone.expect("^" + phone.lp + r"\* ", "the lying relay's list")
     before = core.pane()
     phone.click("select")
     phone.expect(r"^View .*writable", "view")
@@ -150,7 +151,7 @@ def s04(run, name, profile):
     phone.close()
     phone = Phone(run, name, profile, {"Muxway-Server": relay.url, "Muxway-Token": tok})
     run.cleanups.append(phone.close)
-    phone.expect(r"^Panes:   ", "honest list without a star")
+    phone.expect("^" + phone.lp + r"  ", "honest list without a star")
     time.sleep(1)
     phone.click("select")
     phone.expect(r"^View .* read-only", "read-only view")
@@ -211,7 +212,7 @@ def s09(run, name, profile):
 @test("S10", "A relay that says a shell runs claude: the lens applied by program hides nothing of a shell", "e2e-security")
 def s10(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, says_claude=True)
-    phone.expect(r"^Panes: .*\(claude\)", "list says claude")
+    phone.expect(r"^Panes: .*\(claude\)" if profile == "midp1" else r"^Panes: .*Claude \u00b7 test-pane", "list says claude")
     phone.click("select")
     phone.expect(r"^work/0\.0: ", "content")
     rows = phone.rows_after(0, "drawn")
@@ -243,7 +244,7 @@ def s06(run, name, profile):
 @test("S07", "Read-only pane: keypad 5 and 0 open nothing and send nothing", "e2e-security")
 def s07(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, expose=None)
-    phone.expect(r"^Panes:   ", "list without a star")
+    phone.expect("^" + phone.lp + r"  ", "list without a star")
     phone.click("select")
     phone.expect(r"^View .* read-only", "read-only view")
     phone.expect(r"^work/0\.0: ", "content")
@@ -440,7 +441,7 @@ def panes_shown(phone):
     """The entries of the pane list as last drawn."""
     lists = [l for l in phone.trace() if l.startswith("Panes: ")]
     check(lists, "no pane list drawn")
-    return [e for e in lists[-1][7:].split("|") if e]
+    return [e for e in lists[-1][7:].split("|") if e and not e.startswith("= ")]
 
 
 @test("F17", "Pane: View set to Plain for one pane shows its rules, is kept, and leaves other panes alone",
@@ -530,7 +531,7 @@ def host_named_pane(core):
       "e2e-ui")
 def f20(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, before=host_named_pane)
-    phone.expect(r"^Panes: \* test-pane \(bash\)\|", "first pane by title")
+    phone.expect("^" + phone.lp + r"\* test-pane \(bash\)\|", "first pane by title")
     labels = panes_shown(phone)
     check(labels == ["* test-pane (bash)", "* work/0.1 (bash)"], f"list: {labels}")
     phone.shot("list")
@@ -545,7 +546,8 @@ def f20(run, name, profile):
     time.sleep(0.5)
     phone.shot("overlay")
     phone.pick("Back")
-    phone.expect(r"^Panes: \* build \(bash\)\|", "the program's title, its mark dropped")
+    # The spark says Claude on the 2.0 build, as on every client; the small build drops it as decoration.
+    phone.expect("^" + phone.lp + (r"\* Claude \u00b7 build\|" if profile == "midp2" else r"\* build \(bash\)\|"), "the program's title, its mark dropped")
     phone.shot("titled")
 
 
@@ -767,7 +769,13 @@ def f25(run, name, profile):
 
 # --- the inbox and answers ---------------------------------------------------------
 
-ALLOWED = re.compile(r"^/v1/(hosts|panes|inbox)(\?[^/]*)?$|^/v1/panes/[^/?]+/[^/?]+/[^/?]+(/(input|answer|files|later))?(\?[^/]*)?$")
+ALLOWED = re.compile(r"^/v1/(hosts|panes|inbox|talk)(\?[^/]*)?$|^/v1/panes/[^/?]+/[^/?]+/[^/?]+(/(input|answer|files|later|mail|close))?(\?[^/]*)?$"
+                     r"|^/v1/hosts/[^/?]+/sessions$|^/v1/windows/[^/?]+/[^/?]+/[^/?]+/panes$")
+# A read-only pane's menu: Refresh takes the soft key, and nothing that writes is offered.
+RO_MENU = ["Back", "Auto", "Mail", "Pane", "Settings", "Exit"]
+MENU_WITH_CLOSE = ["Keys", "Back", "Image", "Refresh", "Auto", "Mail", "Commands", "Pane", "Later", "Settings", "Close", "Exit"]
+# The list's menu with + pane alone (a writable pane, no host that starts sessions).
+PANES_MENU_SPLIT = ["Inbox", "Messages", "Auto", "Settings", "+ pane", "Exit"]
 
 
 def asks(core):
@@ -776,16 +784,29 @@ def asks(core):
     time.sleep(1.2)  # the hub lists from a one-second cache
 
 
-@test("S16", "Read-only token: the inbox shows the question, the answer is refused by the hub, the ask still waits",
+@test("S16", "Read-only token: the inbox row offers no choices and opens the pane; a relay that lies about the mode gets the hub's refusal",
       "e2e-security", profiles=("midp2",))
 def s16(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, write=None, before=asks)
-    phone.expect(r"^Panes:  \?test-pane \(muxway\)", "a question, no star")
+    phone.expect("^" + phone.lp + r" \?test-pane \(muxway\)", "a question, no star")
     phone.pick_list("Inbox")
     phone.expect(r"^Inbox: \? test-pane \(muxway\): deploy\?", "the inbox row")
     phone.shot("inbox")
     phone.click("select")
-    phone.expect(r"^Answer: yes\|no\|", "the choices")
+    phone.expect(r"^View " + HOST + r"/work/0\.0 read-only", "the row opened the pane, no choices offered")
+    phone.expect(r"^work/0\.0: ", "content")
+    check(not any(l.startswith("Answer:") for l in phone.trace()), "choices offered on a read-only pane")
+    check(not any(r["method"] == "POST" for r in relay.requests), "something was posted")
+    phone.shot("opened")
+    # The relay says the pane is writable: the choices are offered, the hub refuses the answer.
+    relay.mode = "lie-writable"
+    phone.pick("Back", RO_MENU)
+    phone.expect("^" + phone.lp + r"\*\?test-pane", "the lying list", after=1)
+    n = len(phone.trace())
+    phone.pick_list("Inbox", PANES_MENU_SPLIT)
+    phone.expect(r"^Inbox: \? test-pane \(muxway\): deploy\?", "the inbox row again", after=n)
+    phone.click("select")
+    phone.expect(r"^Answer: yes\|no\|", "the choices", after=n)
     phone.shot("choices")
     phone.click("select")  # yes
     phone.expect(r"^Alert: Read only", "the hub's refusal")
@@ -810,11 +831,12 @@ def s18(run, name, profile):
     phone.shot("capped")
 
 
-@test("S19", "The app requests only the paths a relay forwards, the inbox and an answer included",
+@test("S19", "The app requests only the paths a relay forwards: the inbox, an answer, the feed, mail, a session, a split and a close included",
       "e2e-security", profiles=("midp2",))
 def s19(run, name, profile):
-    core, relay, phone, tok = setup(run, name, profile, before=asks)
-    phone.expect(r"^Panes: \*\?test-pane", "pane list")
+    core, relay, phone, tok = setup(run, name, profile, before=asks, sessions=True, close=True)
+    relay.hosts_flags = {HOST: "sessions|close|mail|later|ask"}
+    phone.expect("^" + phone.lp + r"\*\?test-pane", "pane list")
     phone.pick_list("Inbox")
     phone.expect(r"^Inbox: \? test-pane", "inbox")
     phone.click("select")
@@ -824,14 +846,45 @@ def s19(run, name, profile):
     wait_for("the ask printed the answer", lambda: "EXIT=0" in core.pane())
     phone.expect(r"^Inbox: $", "the inbox empty again", after=1)
     phone.menu(0)  # Back
-    phone.expect(r"^Panes: \* test-pane", "back on the list, nothing waits", after=1)
+    n = len(phone.trace())
+    phone.pick_list("Messages", PANES_MENU_PLUS)
+    phone.expect(r"^Messages: ", "the feed", after=n)
+    phone.menu(0)  # Back
     phone.click("select")
     phone.expect(r"^work/0\.0: ", "content")
+    phone.pick("Mail", MENU_WITH_CLOSE)
+    phone.expect(r"^Mail: ", "the pane's mail")
+    phone.menu(0)  # Mail pane
+    phone.type("a mail")
+    phone.click("right")  # Send
+    phone.expect(r"^Mailed .* 201", "mailed")
+    dismiss(phone)
+    phone.menu(1)  # Back to the pane
+    phone.pick("Close", MENU_WITH_CLOSE)
+    phone.expect(r"^Confirm Close", "the question")
+    phone.click("select")  # Close
+    phone.expect(r"^Close 204", "closed")
+    n = len(phone.trace())
+    phone.expect(r"^Panes: ", "the list again", after=n - 1)
+    phone.pick_list("+ session", PANES_MENU_PLUS)
+    phone.expect(r"^Session " + HOST + "$", "the session box")
+    phone.type("scratch")
+    phone.click("right")  # Start
+    phone.expect(r"^Session 201", "started")
+    phone.expect(r"^View " + HOST + r"/scratch/0\.0", "its pane opened")
+    phone.pick("Back", MENU_WITH_CLOSE)
+    n = len(phone.trace())
+    phone.expect(r"^Panes: ", "the list once more", after=n - 1)
+    phone.pick_list("+ pane", PANES_MENU_PLUS)  # the new session sorts first: its pane is under the cursor
+    phone.expect(r"^Confirm New pane", "the question")
+    phone.click("select")  # Beside
+    phone.expect(r"^Split 201", "split")
+    phone.expect(r"^View " + HOST + r"/scratch/0\.1", "the new pane opened")
     paths = [r["path"] for r in relay.requests]
     bad = [p for p in paths if not ALLOWED.match(p)]
     check(not bad, f"paths outside the relay's list: {bad}")
-    check(any(p.startswith("/v1/inbox") for p in paths) and any(p.endswith("/answer") for p in paths),
-          f"inbox or answer never requested: {paths}")
+    for want in ("/v1/inbox", "/answer", "/v1/talk", "/mail", "/close", "/sessions", "/panes"):
+        check(any(want in p for p in paths), f"{want} never requested: {paths}")
 
 
 @test("S20", "A relay that forges the mail and talk columns: letters, 300 digits, itself, a path, a stranger",
@@ -839,7 +892,7 @@ def s19(run, name, profile):
 def s20(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, mode="lie-talk", before=second_pane)
     shown = phone.expect(r"^Panes: .*test-pane-2", "pane list")
-    check(shown == r"Panes: * test-pane (bash)|* test-pane-2 (bash)|", f"the forged columns left a mark: {shown}")
+    check(shown == phone.list + "* test-pane (bash)|* test-pane-2 (bash)|", f"the forged columns left a mark: {shown}")
     phone.shot("intact")
     phone.click("select")
     phone.expect(r"^work/0\.0: ", "the first row opens its pane")
@@ -857,10 +910,10 @@ def f29(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, mode="talk", before=three_panes)
     shown = phone.expect(r"^Panes: .*test-pane-3", "pane list")
     if profile == "midp2":
-        want = "Panes: [* test-pane \u2709 2 (bash)|]* test-pane-3 (bash)| * test-pane-2 (bash)|"
+        want = phone.list + "[* test-pane \u2709 2 (bash)|]* test-pane-3 (bash)| * test-pane-2 (bash)|"
     else:
         # The 1.0 build has no room for the frame: the list as always.
-        want = "Panes: * test-pane (bash)|* test-pane-2 (bash)|* test-pane-3 (bash)|"
+        want = phone.list + "* test-pane (bash)|* test-pane-2 (bash)|* test-pane-3 (bash)|"
     check(shown == want, f"the list reads {shown!r}, want {want!r}")
     phone.shot("talk")
 
@@ -868,7 +921,7 @@ def f29(run, name, profile):
 @test("F30", "A row pulled next to its partner opens the pane it names", "e2e-ui", profiles=("midp2",))
 def f30(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, mode="talk", before=three_panes)
-    phone.expect(r"^Panes: \[\* test-pane .*\]\* test-pane-3", "the regrouped list")
+    phone.expect("^" + phone.lp + r"\[\* test-pane .*\]\* test-pane-3", "the regrouped list")
     phone.key("Down")  # the partner, pulled up from the third place
     phone.click("select")
     phone.expect(r"^View " + HOST + r"/work/0\.2 writable", "the third pane opened")
@@ -882,16 +935,16 @@ def f24(run, name, profile):
         core.notify("question", "deploy?")
         time.sleep(1.2)
     core, relay, phone, tok = setup(run, name, profile, before=question)
-    phone.expect(r"^Panes: \*\?test-pane \(bash\)", "the question mark")
+    phone.expect("^" + phone.lp + r"\*\?test-pane \(bash\)", "the question mark")
     phone.shot("question")
     core.notify("permission", "run it?")
     time.sleep(1.2)
     phone.click("right")  # Refresh
-    phone.expect(r"^Panes: \*!test-pane \(bash\)", "the permission mark", after=1)
+    phone.expect("^" + phone.lp + r"\*!test-pane \(bash\)", "the permission mark", after=1)
     core.notify("working")
     time.sleep(1.2)
     phone.click("right")
-    phone.expect(r"^Panes: \* test-pane \(bash\)", "cleared", after=2)
+    phone.expect("^" + phone.lp + r"\* test-pane \(bash\)", "cleared", after=2)
     phone.shot("cleared")
     # A working pane is plain on the keypad: no glyph, no word, no paint (guideline 1.2).
     phone.click("select")
@@ -912,7 +965,7 @@ def f26(run, name, profile):
         core.notify("question", "deploy?")
         time.sleep(1.2)
     core, relay, phone, tok = setup(run, name, profile, before=two)
-    phone.expect(r"^Panes: \*\?test-pane", "pane list")
+    phone.expect("^" + phone.lp + r"\*\?test-pane", "pane list")
     phone.pick_list("Inbox")
     phone.expect(r"^Inbox: v work/0\.1 \(bash\): finished\|\? test-pane \(bash\): deploy\?", "oldest first")
     phone.shot("inbox")
@@ -926,7 +979,7 @@ def f26(run, name, profile):
       profiles=("midp2",))
 def f27(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, before=asks)
-    phone.expect(r"^Panes: \*\?test-pane", "pane list")
+    phone.expect("^" + phone.lp + r"\*\?test-pane", "pane list")
     phone.pick_list("Inbox")
     phone.expect(r"^Inbox: \? test-pane \(muxway\): deploy\?", "the question")
     phone.click("select")
@@ -985,8 +1038,8 @@ def s21(run, name, profile):
         second_pane(core)
         parked(core)
     core, relay, phone, tok = setup(run, name, profile, write=None, mode="lie-later", before=two)
-    shown = phone.expect(r"^Panes:  zz test-pane \(bash\)", "the parked mark on a read-only row")
-    check(shown == "Panes:  zz test-pane (bash)| zz test-pane-2 (bash)|", f"list: {shown!r}")
+    shown = phone.expect("^" + phone.lp + r" zz test-pane \(bash\)", "the parked mark on a read-only row")
+    check(shown == phone.list + " zz test-pane (bash)| zz test-pane-2 (bash)|", f"list: {shown!r}")
     phone.shot("marks")
     phone.click("select")  # the pane the hub parked: a reader opens it, nothing is posted
     phone.expect(r"^View " + HOST + r"/work/0\.0 read-only", "read-only view")
@@ -1016,7 +1069,7 @@ def f31(run, name, profile):
     phone.shot("overlay")
     n = len(phone.trace())
     phone.pick("Back")
-    phone.expect(r"^Panes: \*zz test-pane \(bash\)\|\* work/0\.1 \(bash\)\|$", "the mark in the list", after=n)
+    phone.expect("^" + phone.lp + r"\*zz test-pane \(bash\)\|\* work/0\.1 \(bash\)\|$", "the mark in the list", after=n)
     phone.shot("parked-list")
     # A question on the other pane, younger than the parking: the inbox lists it first all the same.
     core.notify("question", "deploy?", "work:0.1")
@@ -1035,7 +1088,7 @@ def f31(run, name, profile):
     phone.shot("woken")
     n = len(phone.trace())
     phone.pick("Back")
-    phone.expect(r"^Panes: \* test-pane \(bash\)\|\*\?work/0\.1", "plain again, the question still there", after=n)
+    phone.expect("^" + phone.lp + r"\* test-pane \(bash\)\|\*\?work/0\.1", "plain again, the question still there", after=n)
     # Later, then Wake from the menu.
     phone.click("select")
     phone.expect(r"^work/0\.0: ", "content", after=n)
@@ -1054,7 +1107,7 @@ def f31(run, name, profile):
 @test("F32", "A pane parked elsewhere: zz on both builds; opening it wakes it on the 2.0 build and leaves it on the 1.0 build", "e2e-ui")
 def f32(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, before=parked)
-    phone.expect(r"^Panes: \*zz test-pane \(bash\)", "the parked mark")
+    phone.expect("^" + phone.lp + r"\*zz test-pane \(bash\)", "the parked mark")
     phone.shot("parked")
     phone.click("select")
     phone.expect(r"^work/0\.0: ", "content")
@@ -1066,7 +1119,7 @@ def f32(run, name, profile):
         check(not rows, f"still in the hub's inbox: {rows}")
         n = len(phone.trace())
         phone.pick("Back")
-        phone.expect(r"^Panes: \* test-pane \(bash\)", "plain again", after=n)
+        phone.expect("^" + phone.lp + r"\* test-pane \(bash\)", "plain again", after=n)
     else:
         check(not posts, "the 1.0 build posted a wake")
         check(len(rows) == 1 and "\tlater\t" in rows[0], f"the pane is not parked any more: {rows}")
@@ -1106,7 +1159,7 @@ def s22(run, name, profile):
 def s23(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, write=None, preview=True, before=named)
     shown = phone.expect(r"^Panes: .*test-pane-2", "pane list")
-    check(shown == "Panes:   review \u00b7 test-pane (bash)|  test-pane-2 (bash)|", f"a reader was shown a folder: {shown!r}")
+    check(shown == phone.list + "  review \u00b7 test-pane (bash)|  test-pane-2 (bash)|", f"a reader was shown a folder: {shown!r}")
     check("/project" not in "".join(l for l in phone.trace()), "the folder reached the phone")
     phone.shot("reader")
 
@@ -1115,10 +1168,10 @@ def s23(run, name, profile):
 def f33(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, preview=True, before=named)
     if profile == "midp2":
-        want = "Panes: * review /project \u00b7 test-pane (bash)|* test-pane-2 /project (bash)|"
+        want = phone.list + "* review /project \u00b7 test-pane (bash)|* test-pane-2 /project (bash)|"
     else:
-        want = "Panes: * review (bash)|* test-pane-2 (bash)|"
-    shown = phone.expect(r"^Panes: \* review", "the alias first")
+        want = phone.list + "* review (bash)|* test-pane-2 (bash)|"
+    shown = phone.expect("^" + phone.lp + r"\* review", "the alias first")
     check(shown == want, f"list: {shown!r}, want {want!r}")
     phone.shot("named")
     phone.click("select")
@@ -1131,7 +1184,7 @@ def f33(run, name, profile):
     if profile == "midp2":
         n = len(phone.trace())
         phone.pick("Back")
-        phone.expect(r"^Panes: \* review", "the list again", after=n)
+        phone.expect("^" + phone.lp + r"\* review", "the list again", after=n)
         core.notify("question", "deploy?")
         time.sleep(1.2)
         phone.pick_list("Inbox")
@@ -1144,14 +1197,14 @@ def f34(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile)
     open_pane(phone)
     phone.click("pound")
-    phone.expect(r"^Info on$", "overlay, plain")
+    phone.expect(r"^Info on: > test-pane \(bash\)$", "overlay, plain")
     phone.click("pound")
     phone.pick("Later")
     phone.expect(r"^Later true 204", "parked")
     dismiss(phone)
     n = len(phone.trace())
     phone.click("pound")
-    phone.expect(r"^Info on italic$", "the name in the italic face", after=n)
+    phone.expect(r"^Info on italic: > zz test-pane \(bash\)$", "the name in the italic face", after=n)
     time.sleep(1)
     phone.shot("slanted")
     phone.click("pound")
@@ -1161,9 +1214,491 @@ def f34(run, name, profile):
     dismiss(phone)
     n = len(phone.trace())
     phone.click("pound")
-    phone.expect(r"^Info on$", "plain again", after=n)
+    phone.expect(r"^Info on: > test-pane \(bash\)$", "plain again", after=n)
     time.sleep(1)
     phone.shot("straight")
+
+
+# --- messages and mail -------------------------------------------------------------------
+
+def mail_address(target="work:0.0"):
+    return f"{HOST}/{target.replace(':', '/')}"
+
+
+@test("S24", "Read-only token: the pane's mail lists, nothing offers to mail; a relay that lies about the mode gets the hub's refusal",
+      "e2e-security", profiles=("midp2",))
+def s24(run, name, profile):
+    def mails(core):
+        second_pane(core)
+        t = core.token()
+        core.mail(t, mail_address(), "run the tests")
+        core.mail(t, mail_address(), "and tell me", origin=core.pane_id("work:0.1"))
+    core, relay, phone, tok = setup(run, name, profile, write=None, before=mails)
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.pick("Mail", RO_MENU)
+    shown = phone.expect(r"^Mail: ", "the mail list")
+    check("< phone " in shown and "unread: run the tests" in shown and "< test-pane-2 (bash) " in shown, f"the rows: {shown!r}")
+    phone.shot("mail")
+    phone.click("select")  # the client's mail: nobody to mail back
+    phone.expect(r"^Alert: No sender to mail back", "nothing to aim at")
+    dismiss(phone)
+    phone.key("Down")
+    phone.click("select")  # the pane's mail: its sender is read-only too
+    phone.expect(r"^Alert: No sender to mail back", "a read-only sender is not offered")
+    dismiss(phone)
+    check(not any(r["method"] == "POST" for r in relay.requests), "something was posted")
+    # The relay says every pane is writable: the box opens, the hub refuses.
+    relay.mode = "lie-writable"
+    phone.menu(0)  # Back, to the pane
+    phone.pick("Back", RO_MENU)
+    phone.expect("^" + phone.lp + r".*\* test-pane \u2709", "the lying list", after=1)
+    n = len(phone.trace())
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content again", after=n)
+    phone.pick("Mail")
+    phone.expect(r"^Mail: ", "the list again", after=n)
+    phone.key("Down")
+    phone.click("select")
+    phone.expect(r"^Mail box " + HOST + r"/work/0\.1", "the box, aimed at the sender", after=n)
+    phone.type("thanks")
+    phone.click("right")  # Send
+    phone.expect(r"^Mailed .* 403", "refused by the hub")
+    phone.expect(r"^Alert: Read only", "said so")
+    phone.shot("refused")
+
+
+@test("S25", "A relay that forges the feed and the mail rows: letters, strangers, a path, no kind, 300 characters with control characters",
+      "e2e-security", profiles=("midp2",))
+def s25(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-feed", before=second_pane)
+    phone.expect(r"^Panes: ", "pane list")
+    phone.pick_list("Messages")
+    shown = phone.expect(r"^Messages: ", "the forged feed")
+    rows = [r for r in shown[10:].split("|") if r]
+    check(len(rows) == 1, f"{len(rows)} rows shown of four forged and the next row: {rows}")
+    check(rows[0].startswith("test-pane (bash) \u2192 y/0.0 ") and len(rows[0]) <= 240 and all(c >= " " for c in rows[0]),
+          f"the stranger's row: {rows[0]!r}")
+    phone.shot("feed")
+    phone.click("select")  # a stranger: nothing opens, nothing is asked
+    time.sleep(2)
+    check(not any(l.startswith("View ") for l in phone.trace()), "a stranger's pane was opened")
+    phone.menu(0)  # Back
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.pick("Mail")
+    shown = phone.expect(r"^Mail: ", "the forged mail")
+    rows = [r for r in shown[6:].split("|") if r]
+    check(len(rows) == 1 and rows[0].startswith("< " + "a" * 32 + " ") and len(rows[0]) <= 242 and all(c >= " " for c in rows[0]),
+          f"the forged mail rows: {rows!r}")
+    phone.shot("mail")
+    check(not any(r["method"] == "POST" for r in relay.requests), "something was posted")
+
+
+@test("F35", "Messages: what panes said to panes, oldest first, by the list's names; 7 opens it; a typed row opens its pane, a mail row its mail",
+      "e2e-ui", profiles=("midp2",))
+def f35(run, name, profile):
+    def talk(core):
+        second_pane(core)
+        t = core.token()
+        core.say(t, mail_address("work:0.1"), "echo hello", core.pane_id("work:0.0"))
+        core.mail(t, mail_address(), "look at the log", origin=core.pane_id("work:0.1"))
+    core, relay, phone, tok = setup(run, name, profile, before=talk)
+    phone.expect(r"^Panes: ", "pane list")
+    phone.pick_list("Messages")
+    shown = phone.expect(r"^Messages: ", "the feed")
+    want = r"^Messages: test-pane \(bash\) \u2192 test-pane-2 \(bash\) \d\d:\d\d: echo hello\|test-pane-2 \(bash\) \u2192 test-pane \(bash\) \d\d:\d\d: \u2709 look at the log\|$"
+    check(re.match(want, shown), f"the feed reads {shown!r}")
+    phone.shot("messages")
+    phone.click("select")  # the typed row opens the pane it was said to
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable", "the second pane")
+    phone.expect(r"^work/0\.1: ", "its content")
+    n = len(phone.trace())
+    phone.click("k7")
+    phone.expect(r"^Messages: ", "the feed by 7", after=n)
+    phone.shot("from-7")
+    phone.key("Down")
+    phone.click("select")  # the mail row opens the mail of the pane it went to
+    shown = phone.expect(r"^Mail: ", "the first pane's mail", after=n)
+    check(re.match(r"^Mail: < test-pane-2 \(bash\) \d\d:\d\d unread: look at the log\|$", shown), f"the mail reads {shown!r}")
+    phone.shot("mail")
+
+
+@test("F36", "Mail: what came in and what the pane sent, merged by time; Mail pane and mail back reach their mailboxes",
+      "e2e-ui", profiles=("midp2",))
+def f36(run, name, profile):
+    def mails(core):
+        second_pane(core)
+        t = core.token()
+        core.mail(t, mail_address(), "run the tests")
+        core.mail(t, mail_address("work:0.1"), "ok", origin=core.pane_id("work:0.0"))
+        core.mail(t, mail_address(), "and tell me", origin=core.pane_id("work:0.1"))
+    core, relay, phone, tok = setup(run, name, profile, before=mails)
+    phone.expect(r"^Panes: .*test-pane \u2709 2", "the list, the unread mail counted")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.pick("Mail")
+    shown = phone.expect(r"^Mail: ", "the mail list")
+    rows = [r for r in shown[6:].split("|") if r]
+    check(len(rows) == 3 and re.match(r"^< phone \d\d:\d\d unread: run the tests$", rows[0])
+          and re.match(r"^> test-pane-2 \(bash\) \d\d:\d\d: ok$", rows[1])
+          and re.match(r"^< test-pane-2 \(bash\) \d\d:\d\d unread: and tell me$", rows[2]), f"the rows: {rows!r}")
+    phone.shot("mail")
+    phone.menu(0)  # Mail pane
+    phone.expect(r"^Mail box " + HOST + r"/work/0\.0", "the box, aimed at the pane")
+    phone.type("done, two failures")
+    phone.shot("box")
+    phone.click("right")  # Send
+    phone.expect(r"^Mailed " + HOST + r"/work/0\.0 201", "mailed")
+    phone.expect(r"^Alert: Mailed", "said so")
+    dismiss(phone)
+    shown = [l for l in phone.trace() if l.startswith("Mail: ")][-1]
+    check("unread: done, two failures" in shown, f"the new mail is not listed: {shown!r}")
+    phone.shot("mailed")
+    phone.key("Down", "Down")
+    phone.click("select")  # the pane's mail: mail back
+    phone.expect(r"^Mail box " + HOST + r"/work/0\.1", "the box, aimed at the sender")
+    phone.type("thanks")
+    phone.click("right")
+    phone.expect(r"^Mailed " + HOST + r"/work/0\.1 201", "mailed back")
+    status, box = core.get(tok, f"/v1/panes/{mail_address('work:0.1')}/mail")
+    check("\tthanks" in box, f"the sender's mailbox: {box!r}")
+    sent = [r for r in relay.requests if r["method"] == "POST" and r["path"].endswith("/mail")]
+    check(all(b"from" not in r["body"] for r in sent), f"a mail claimed an origin: {[r['body'] for r in sent]}")
+
+
+# --- hosts, the overlay, next and previous ----------------------------------------------
+
+@test("S26", "A relay that forges the hosts' flags: unknown words, 300 columns, a ghost host; sessions claimed get the hub's refusal",
+      "e2e-security")
+def s26(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-hosts")
+    shown = phone.expect(r"^Panes: .*test-pane", "pane list")
+    if profile == "midp1":
+        check(shown == "Panes: * test-pane (bash)|", f"the forged hosts left a mark on the small build: {shown!r}")
+        return
+    check(shown == f"Panes: = {HOST} online|* test-pane (bash)|= ghost nothing exposed|", f"list: {shown!r}")
+    phone.shot("forged")
+    phone.pick_list("+ session", PANES_MENU_PLUS)
+    phone.expect(r"^Session " + HOST + "$", "the session box")
+    phone.type("scratch")
+    phone.click("right")  # Start
+    phone.expect(r"^Session 404$", "the hub does not start sessions here")
+    phone.expect(r"^Alert: This host does not start sessions", "said so")
+    phone.shot("refused")
+    posts = [r for r in relay.requests if r["method"] == "POST"]
+    check(len(posts) == 1 and posts[0]["path"] == f"/v1/hosts/{HOST}/sessions" and posts[0]["body"] == b'{"name":"scratch"}',
+          f"posted: {[(p['path'], p['body']) for p in posts]}")
+
+
+@test("F37", "A line per host with its state; a group across two hosts is framed under each; an agent gone reads offline",
+      "e2e-ui", profiles=("midp2",))
+def f37(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="talk-across", read="*/*", write="*/*",
+                                    before=lambda c: c.add_host("bob-desktop", expose=True))
+    shown = phone.expect(r"^Panes: .*bob-desktop", "two hosts")
+    check(shown == f"Panes: = {HOST} online|[* test-pane (bash)|= bob-desktop online|[* bob-desktop-pane (bash)|", f"list: {shown!r}")
+    phone.shot("hosts")
+    phone.click("select")  # the cursor starts on the first pane, under the line
+    phone.expect(r"^View " + HOST + r"/work/0\.0 writable", "the first pane opened")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.pick("Back")
+    core.stop("agent-bob-desktop")
+    wait_for("bob offline", lambda: "bob-desktop\toffline" in core.cli("hub", "agents", "--dir", str(core.dir / "hub")))
+    n = len(phone.trace())
+    phone.click("right")  # Refresh
+    shown = phone.expect(r"^Panes: .*bob-desktop offline", "the host offline", after=n)
+    check(shown == f"Panes: = {HOST} online|* test-pane (bash)|= bob-desktop offline|", f"list: {shown!r}")
+    phone.shot("offline")
+
+
+@test("F38", "Auto on the list re-reads it on the timer without a key, the cursor kept", "e2e-ui", profiles=("midp2",))
+def f38(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, props={"Muxway-Refresh": "2"}, before=second_pane)
+    phone.expect(r"^Panes: .*test-pane-2", "two panes")
+    phone.pick_list("Auto")
+    phone.expect(r"^Alert: Auto refresh every 2 s", "auto on")
+    dismiss(phone)
+    phone.key("Down")  # the second pane
+    core.tmux_cmd("split-window", "-t", "work:0.1", "bash --norc --noprofile")
+    core.tmux_cmd("select-pane", "-t", "work:0.2", "-T", "test-pane-3")
+    core.cli("expose", "--tmux-name", core.tmux, "-t", "work:0.2", "--write")
+    n = len(phone.trace())
+    phone.expect(r"^Panes: .*test-pane-3", "the third pane listed by the timer", after=n)
+    lists = [r for r in relay.requests if r["path"].split("?")[0] == "/v1/panes"]
+    check(len(lists) >= 2, f"{len(lists)} list reads")
+    phone.shot("auto-list")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable", "the cursor stayed on the second pane")
+
+
+@test("F39", "D-pad right and left open the next and the previous pane, round at the ends", "e2e-ui")
+def f39(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=three_panes)
+    phone.expect(r"^Panes: .*test-pane-3", "three panes")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "the first pane")
+    for key, pane in (("Right", "0.1"), ("Right", "0.2"), ("Right", "0.0"), ("Left", "0.2")):
+        n = len(phone.trace())
+        phone.key(key)
+        phone.expect(r"^View " + HOST + "/work/" + pane.replace(".", r"\."), f"{key} to {pane}", after=n)
+        phone.expect(r"^work/" + pane.replace(".", r"\.") + ": ", "its content", after=n)
+    phone.shot("next")
+
+
+@test("F40", "Claude named as every client names it, its title the status; an alias leads, the harness after it", "e2e-ui")
+def f40(run, name, profile):
+    def named_second(core):
+        second_pane(core)
+        core.alias("work:0.1", "review")
+    core, relay, phone, tok = setup(run, name, profile, says_claude=True, before=named_second)
+    shown = phone.expect(r"^Panes: .*review", "pane list")
+    if profile == "midp2":
+        want = phone.list + "* Claude \u00b7 test-pane|* review \u00b7 Claude \u00b7 test-pane-2|"
+    else:
+        want = phone.list + "* test-pane (claude)|* review (claude)|"
+    check(shown == want, f"list: {shown!r}, want {want!r}")
+    phone.shot("harness")
+
+
+@test("F41", "The overlay carries the kind's glyph and read-only on the 2.0 build", "e2e-ui")
+def f41(run, name, profile):
+    def question(core):
+        core.notify("question", "deploy?")
+        time.sleep(1.2)
+    core, relay, phone, tok = setup(run, name, profile, expose=None, before=question)
+    phone.expect(r"^Panes: .* \?test-pane", "the question on a read-only row")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.click("pound")
+    want = r"^Info on:   \? test-pane \(bash\) read-only$" if profile == "midp2" else r"^Info on$"
+    phone.expect(want, "the overlay")
+    time.sleep(1)
+    phone.shot("overlay-read-only")
+
+
+@test("F43", "Theme: green and paper chosen in Settings paint the pane; the choice is kept across a restart", "e2e-ui", profiles=("midp2",))
+def f43(run, name, profile):
+    logs = run.logs(name)
+    core = Core(run, run.binary, logs).start()
+    run.cleanups.append(core.close)
+    tok = core.token()
+    relay = Relay(core.url, logs, "normal")
+    run.cleanups.append(relay.close)
+    home = Path(run.tmp) / f"home-{name}"
+    home.mkdir()
+    phone = Phone(run, name, profile, {"Muxway-Server": relay.url, "Muxway-Token": tok}, home=home)
+    run.cleanups.append(phone.close)
+    open_pane(phone)
+    phone.expect(r"^Theme 0$", "amber by default")
+    phone.shot("amber")
+    for downs, theme, shot in ((8, 1, "green"), (9, 2, "paper")):
+        phone.pick("Settings")
+        phone.expect(r"^Settings: ", "settings")
+        phone.key(*(["Down"] * downs))  # server, token, width, refresh, the three Text entries, then the themes
+        phone.click("select")
+        phone.click("right")  # OK
+        phone.expect(r"^Theme " + str(theme) + "$", f"theme {theme} saved")
+        n = len(phone.trace())
+        phone.expect(r"^Panes: ", "the list", after=n - 1)
+        phone.click("select")
+        phone.expect(r"^work/0\.0: ", "content", after=n)
+        time.sleep(1)
+        phone.shot(shot)
+    phone.close()
+    phone = Phone(run, name, profile, {"Muxway-Server": relay.url, "Muxway-Token": tok}, home=home)
+    run.cleanups.append(phone.close)
+    open_pane(phone)
+    phone.expect(r"^Theme 2$", "paper kept across the restart")
+
+
+@test("F44", "The inbox on a read-only pane with choices: the row opens the pane, nothing is offered", "e2e-ui", profiles=("midp2",))
+def f44(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, write=None, before=asks)
+    phone.expect("^" + phone.lp + r" \?test-pane", "the question")
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: \? test-pane \(muxway\): deploy\?", "the inbox row")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "the pane opened")
+    check(not any(l.startswith("Answer:") for l in phone.trace()), "the Answer list opened")
+    phone.shot("opened")
+
+
+@test("S27", "A session name is checked on the phone: a path, 33 letters, a capital; nothing is asked", "e2e-security", profiles=("midp2",))
+def s27(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile)
+    relay.hosts_flags = {HOST: "sessions"}
+    phone.expect(r"^Panes: ", "pane list")
+    phone.click("right")  # Refresh, with the flag
+    time.sleep(2)
+    phone.pick_list("+ session", PANES_MENU_PLUS)
+    phone.expect(r"^Session " + HOST + "$", "the box")
+    for bad in ("../x", "abcdefghijklmnopqrstuvwxyz0123456", "Scratch"):
+        phone.click("text")
+        phone.key("ctrl+a", "BackSpace")
+        phone.xdo("type", "--delay", "80", bad)
+        n = len(phone.trace())
+        phone.click("right")  # Start
+        phone.expect(r"^Alert: A name is a-z, 0-9, - and _, up to 32", f"{bad!r} refused", after=n)
+        dismiss(phone)
+    phone.shot("refused")
+    check(not any(r["method"] == "POST" for r in relay.requests), "a bad name reached the relay")
+
+
+@test("S28", "A relay that lies about the mode on a host that closes: + pane and Close are offered, the hub refuses both",
+      "e2e-security", profiles=("midp2",))
+def s28(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, expose=None, mode="lie-writable", close=True)
+    relay.hosts_flags = {HOST: "close|mail"}
+    phone.expect("^" + phone.lp + r"\* ", "the lying list")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.pick("Close", MENU_WITH_CLOSE)
+    phone.expect(r"^Confirm Close", "the question")
+    phone.click("select")
+    phone.expect(r"^Close 403$", "refused")
+    phone.expect(r"^Alert: Read only", "said so")
+    dismiss(phone)
+    phone.pick("Back", MENU_WITH_CLOSE)
+    phone.expect("^" + phone.lp + r"\* ", "the list again", after=1)
+    phone.pick_list("+ pane", PANES_MENU_SPLIT)
+    phone.expect(r"^Confirm New pane", "the question")
+    phone.click("select")
+    phone.expect(r"^Split 403$", "refused too")
+    phone.expect(r"^Alert: Read only", "said so")
+    phone.shot("refused")
+    check(core.pane(), "the pane is gone")
+
+
+@test("S29", "A relay that forges what waits under a pane: letters, 300 of them, a kind on an awake pane", "e2e-security")
+def s29(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, write=None, before=lambda c: (second_pane(c), parked(c)))
+    phone.expect(r"^Panes: ", "the list")
+    relay.pending = {f"{HOST}/work/0.0": "x" * 300, f"{HOST}/work/0.1": "question"}
+    n = len(phone.trace())
+    phone.click("right")  # Refresh, with the forged column
+    shown = phone.expect(r"^Panes: .*test-pane-2", "the list again", after=n)
+    check(shown == phone.list + " zz test-pane (bash)|  test-pane-2 (bash)|", f"the forged column left a mark: {shown!r}")
+    relay.pending = {f"{HOST}/work/0.0": "\x1b[2J"}
+    n = len(phone.trace())
+    phone.click("right")
+    shown = phone.expect(r"^Panes: .*test-pane-2", "the list once more", after=n)
+    check(shown == phone.list + " zz test-pane (bash)|  test-pane-2 (bash)|", f"the forged column left a mark: {shown!r}")
+    phone.shot("intact")
+
+
+@test("F42", "Commands: a shell's starters sent with Enter; Claude Code's slash commands when the program is claude; /rename waits in Reply",
+      "e2e-ui", profiles=("midp2",))
+def f42(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile)
+    open_pane(phone)
+    phone.pick("Commands")
+    phone.expect(r"^Commands 29$", "the shell's starters")
+    phone.shot("commands")
+    for _ in range(23):
+        phone.key("Down")  # pwd, whose one line stays on the screen
+    phone.click("select")
+    wait_for("pwd ran", lambda: re.search(r"^\$ pwd\n/", core.pane(), re.M))
+    phone.expect(r"^work/0\.0: .*\$ pwd\|/", "the pane shows it")
+    phone.shot("sent")
+    relay.says_claude = True
+    phone.pick("Back")
+    phone.expect("^" + phone.lp + r"\* Claude", "the list says claude", after=1)
+    n = len(phone.trace())
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content", after=n)
+    phone.pick("Commands")
+    phone.expect(r"^Commands 24$", "the slash commands", after=n)
+    phone.key("Down", "Down", "Down")  # /rename
+    phone.click("select")
+    phone.expect(r"^Reply$", "waits in Reply", after=n)
+    phone.shot("rename")
+    sent = [r for r in relay.requests if r["method"] == "POST"]
+    check(len(sent) == 2 and sent[0]["body"] == b'{"text":"pwd"}' and sent[1]["body"] == b'{"key":"Enter"}', f"posted: {[r['body'] for r in sent]}")
+
+
+@test("F45", "+ session from the host's line, + pane beside or below, Close: each where the host allows it, with its confirm list",
+      "e2e-ui", profiles=("midp2",))
+def f45(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, sessions=True, close=True)
+    relay.hosts_flags = {HOST: "sessions|close|mail"}
+    phone.expect(r"^Panes: ", "the list")
+    phone.pick_list("+ session", PANES_MENU_PLUS)
+    phone.expect(r"^Session " + HOST + "$", "the box")
+    phone.type("scratch")
+    phone.shot("session")
+    phone.click("right")  # Start
+    phone.expect(r"^Session 201$", "started")
+    # The session's pane is titled with the machine's name by tmux, so the list is not read for it.
+    phone.expect(r"^View " + HOST + r"/scratch/0\.0 writable", "its first pane opened")
+    phone.expect(r"^scratch/0\.0: ", "content")
+    phone.pick("Back", MENU_WITH_CLOSE)
+    n = len(phone.trace())
+    phone.expect(r"^Panes: ", "the list", after=n - 1)
+    # The new session sorts first, so the cursor is on its pane.
+    phone.pick_list("+ pane", PANES_MENU_PLUS)
+    phone.expect(r"^Confirm New pane beside ", "the question")
+    phone.shot("split")
+    phone.key("Down")  # Below
+    n = len(phone.trace())
+    phone.click("select")
+    phone.expect(r"^Split 201$", "split", after=n)
+    phone.expect(r"^View " + HOST + r"/scratch/0\.1 writable", "the new pane opened", after=n)
+    phone.expect(r"^scratch/0\.1: ", "its content", after=n)
+    split = [r for r in relay.requests if r["path"].endswith("/panes") and r["method"] == "POST"]
+    check(len(split) == 1 and split[0]["path"] == f"/v1/windows/{HOST}/scratch/0/panes" and split[0]["body"] == b'{"direction":"v"}',
+          f"the split: {[(r['path'], r['body']) for r in split]}")
+    phone.pick("Close", MENU_WITH_CLOSE)
+    phone.expect(r"^Confirm Close the pane on " + HOST, "the question")
+    phone.shot("close")
+    n = len(phone.trace())
+    phone.click("select")  # Close
+    phone.expect(r"^Close 204$", "closed", after=n)
+    shown = phone.expect(r"^Panes: ", "the list again", after=n)
+    rows = [r for r in shown[7:].split("|") if r and not r.startswith("= ")]
+    check(len(rows) == 2 and "split-pane" not in shown and "new-pane" in shown, f"the list after the close: {shown!r}")
+    phone.shot("closed")
+    # On a host line + pane asks for a pane first; on a host without the flag + session says so.
+    phone.key("Up")
+    phone.pick_list("+ pane", PANES_MENU_PLUS)
+    phone.expect(r"^Alert: Pick a writable pane first", "a line is no pane")
+    dismiss(phone)
+    relay.hosts_flags = {HOST: "mail"}
+    phone.click("right")  # Refresh
+    time.sleep(2)
+    phone.pick_list("+ pane", PANES_MENU_SPLIT)
+    phone.expect(r"^Confirm New pane", "+ pane needs no flag")
+    phone.menu(0)  # Back
+    posts = [r for r in relay.requests if r["method"] == "POST"]
+    check(len(posts) == 3, f"{len(posts)} writes, expected the session, the split and the close")
+
+
+@test("F46", "What waits under a parked pane: zz ! in the list, the inbox and the overlay (2.0); zz alone on the 1.0 build", "e2e-ui")
+def f46(run, name, profile):
+    def park(core):
+        parked(core)
+        core.notify("permission", "run it?")
+        time.sleep(1.2)
+    core, relay, phone, tok = setup(run, name, profile, write=None, before=park)
+    phone.expect(r"^Panes: ", "the list without the column")
+    relay.pending = {f"{HOST}/work/0.0": "permission"}
+    n = len(phone.trace())
+    phone.click("right")  # Refresh, with the column
+    want = " zz ! test-pane (bash)|" if profile == "midp2" else " zz test-pane (bash)|"
+    phone.expect("^" + phone.lp + re.escape(want) + "$", "the mark with what waits under it", after=n)
+    phone.shot("under")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.click("pound")
+    phone.expect(r"^Info on italic:   zz ! test-pane \(bash\) read-only$" if profile == "midp2" else r"^Info on$", "the overlay")
+    time.sleep(1)
+    phone.shot("overlay")
+    if profile == "midp2":
+        phone.click("pound")
+        phone.click("k9")
+        phone.expect(r"^Inbox: zz ! test-pane \(bash\): run it\?\|$", "the inbox row")
+        phone.shot("inbox")
 
 
 # --- runner -------------------------------------------------------------------------

@@ -107,10 +107,13 @@ class Core:
         return subprocess.run(["tmux", "-L", self.tmux, *args], capture_output=True, text=True, timeout=10,
                               cwd=self.preview / "project" if self.preview else None).stdout.strip()
 
-    def start(self, expose="--write", inbox=False, preview=False):
-        """preview: the agent gets a preview root and the shell starts in a project folder under it."""
+    def start(self, expose="--write", inbox=False, preview=False, sessions=False, close=False):
+        """preview: the agent gets a preview root and the shell starts in a project folder under it;
+        sessions and close: the agent's --allow-sessions and --allow-close."""
         self.inbox = self.dir / "inbox" if inbox else None
         self.preview = self.dir / "roots" if preview else None
+        self.sessions, self.closes = sessions, close
+        self.hosts = []
         shell = "env -i PATH=/usr/bin:/bin TERM=xterm LANG=C.UTF-8 PS1='$ ' bash --norc --noprofile"
         where = []
         if self.preview:
@@ -118,6 +121,9 @@ class Core:
             where = ["-c", str(self.preview / "project")]
         self.tmux_cmd("-f", "/dev/null", "new-session", "-d", "-s", "work", "-n", "shell", "-x", "80", "-y", "24", *where, shell)
         self.tmux_cmd("select-pane", "-t", "work:0.0", "-T", "test-pane")
+        # A pane the hub makes would be titled with this machine's name by tmux: never that in a log.
+        self.tmux_cmd("set-hook", "-g", "after-new-session", "select-pane -T new-pane")
+        self.tmux_cmd("set-hook", "-g", "after-split-window", "select-pane -T split-pane")
         self.spawn("hub", "hub", "serve", "--dir", str(self.dir / "hub"), "--listen", f"127.0.0.1:{self.port}",
                    "--public-url", self.url)
         wait_for("hub", lambda: (self.dir / "hub" / "admin.sock").exists())
@@ -134,8 +140,27 @@ class Core:
             args += ["--inbox", str(self.inbox)]
         if self.preview:
             args += ["--preview", str(self.preview)]
+        if self.sessions:
+            args.append("--allow-sessions")
+        if self.closes:
+            args.append("--allow-close")
         self.spawn("agent", *args)
         wait_for("agent online", lambda: f"{HOST}\tonline" in self.cli("hub", "agents", "--dir", str(self.dir / "hub")))
+
+    def add_host(self, name, expose=False):
+        """A second host on the hub: its own agent and tmux server; a pane exposed when asked."""
+        code = self.cli("hub", "pair-code", "--dir", str(self.dir / "hub"), "--host", name)
+        self.cli("agent", "pair", "--dir", str(self.dir / f"agent-{name}"), code)
+        tmux = f"{self.tmux}-{name}"
+        subprocess.run(["tmux", "-L", tmux, "-f", "/dev/null", "new-session", "-d", "-s", "work", "-x", "80", "-y", "24",
+                        "env -i PATH=/usr/bin:/bin TERM=xterm PS1='$ ' bash --norc --noprofile"], check=True, timeout=10)
+        subprocess.run(["tmux", "-L", tmux, "select-pane", "-t", "work:0.0", "-T", f"{name}-pane"], check=True, timeout=10)
+        self.spawn(f"agent-{name}", "agent", "run", "--dir", str(self.dir / f"agent-{name}"), "--tmux-name", tmux)
+        wait_for(f"{name} online", lambda: f"{name}\tonline" in self.cli("hub", "agents", "--dir", str(self.dir / "hub")))
+        if expose:
+            self.cli("expose", "--tmux-name", tmux, "-t", "work:0.0", "--write")
+        self.hosts.append(name)
+        time.sleep(1.2)  # the hub lists from a one-second cache
 
     def token(self, read=f"{HOST}/*", write=f"{HOST}/*"):
         args = ["hub", "token", "create", "--dir", str(self.dir / "hub"), "--name", "phone", "--read", read]
@@ -184,6 +209,40 @@ class Core:
         if r.status != 204:
             raise RuntimeError(f"later {address} {on}: {r.status}")
 
+    def post(self, tok, path, body, origin=None):
+        """A JSON request as another client makes it; origin names the pane it comes from (its tmux id)."""
+        if origin:
+            body = {**body, "from": {"host": HOST, "pane_id": origin}}
+        c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
+        c.request("POST", path, body=json.dumps(body),
+                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data
+
+    def get(self, tok, path):
+        """A text-mode read as the phone makes it."""
+        c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
+        c.request("GET", path, headers={"Authorization": f"Bearer {tok}", "Accept": "text/plain"})
+        r = c.getresponse()
+        body = r.read().decode()
+        c.close()
+        return r.status, body
+
+    def mail(self, tok, address, text, origin=None):
+        """Mails a pane, from a client, or from the pane whose id origin is."""
+        status, data = self.post(tok, f"/v1/panes/{address}/mail", {"text": text}, origin)
+        if status != 201:
+            raise RuntimeError(f"mail {address}: {status} {data[:80]}")
+        time.sleep(1.2)  # the hub lists from a one-second cache
+
+    def say(self, tok, address, text, origin):
+        """Types into a pane from another pane, so the feed carries who said it."""
+        status, data = self.post(tok, f"/v1/panes/{address}/input", {"text": text}, origin)
+        if status != 204:
+            raise RuntimeError(f"say {address}: {status} {data[:80]}")
+
     def waiting(self, tok):
         """The hub's inbox in text mode, one row per waiting pane."""
         c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
@@ -197,6 +256,8 @@ class Core:
         for name in list(self.procs):
             self.stop(name)
         self.tmux_cmd("kill-server")
+        for name in self.hosts:
+            subprocess.run(["tmux", "-L", f"{self.tmux}-{name}", "kill-server"], capture_output=True, timeout=10)
         for key in ("hub/hub.key", "agent/agent.key"):
             p = self.dir / key
             if p.exists():
@@ -232,6 +293,11 @@ class Relay:
         self.mode = mode
         # The list names the program claude, so Auto picks the lens by it.
         self.says_claude = False
+        # The columns the core adds for the keypad phone, until a hub writes them itself: the hosts'
+        # flags by host, what waits under a parked pane (pending) by address, replied by mail id.
+        self.hosts_flags = {}
+        self.pending = {}
+        self.replied = {}
         self.log = open(logs / "relay.log", "a")
         self.requests = []
         self.port = free_port()
@@ -319,6 +385,33 @@ class Relay:
                             f[4] = "later"
                         rows.append("\t".join(f))
                     data = "\n".join(rows).encode("latin-1")
+                where = self.path.split("?")[0]
+                if where == "/v1/hosts" and (relay.hosts_flags or relay.mode == "lie-hosts"):
+                    data = relay.flags(data)
+                if relay.pending and where in ("/v1/panes", "/v1/inbox"):
+                    data = set_column(data, 9 if where == "/v1/panes" else 5, lambda f: relay.pending.get(f[0], ""))
+                if relay.replied and where.endswith("/mail"):
+                    data = set_column(data, 6, lambda f: relay.replied.get(f[0], ""))
+                if relay.mode == "talk-across" and where == "/v1/panes":
+                    # The first pane talked with the second host's pane: a group across two hosts.
+                    pair = {f"{HOST}/work/0.0": "bob-desktop/work/0.0", "bob-desktop/work/0.0": f"{HOST}/work/0.0"}
+                    data = set_column(data, 6, lambda f: pair.get(f[0], ""))
+                if relay.mode == "lie-feed" and where == "/v1/talk":
+                    # Feed rows a hub never writes: a seq of letters, a sender of ../admin, a kind that is not one,
+                    # a stranger as the recipient with 300 characters and control characters, and the next row.
+                    long = "x" * 300 + "\x1b[2J\x07"
+                    rows = [f"1\t1767225600\t{HOST}/work/0.0\tx/y/0.0\ttext\t{long}",
+                            f"abc\t1767225600\t{HOST}/work/0.0\t{HOST}/work/0.1\ttext\tletters",
+                            f"2\t1767225600\t../admin\t{HOST}/work/0.1\ttext\tfrom nowhere",
+                            f"3\t1767225600\t{HOST}/work/0.0\t{HOST}/work/0.1\tbogus\tno kind",
+                            "next\t5"]
+                    data = ("\n".join(rows) + "\n").encode("latin-1")
+                if relay.mode == "lie-feed" and where.endswith("/mail") and self.command == "GET":
+                    # Mail rows the same way: an id of letters, a sender of ../admin, an actor of 300 letters.
+                    rows = [f"7\t1767225600\t../admin\tactor\t0\tfrom nowhere",
+                            f"x\t1767225600\t\tactor\t0\tletters",
+                            f"8\t1767225600\t\t{'a' * 300}\t0\t{'y' * 300}\x1b[2J"]
+                    data = ("\n".join(rows) + "\n").encode("latin-1")
                 if relay.mode == "lie-title" and self.path.split("?")[0] == "/v1/panes":
                     # Titles a program could choose: one that looks like a writable entry, one too long.
                     data = (f"{HOST}/work/0.0\tread\tbash\t* {HOST}/work/0.0 claude\twrite\tx\n"
@@ -365,16 +458,38 @@ class Relay:
             out.append(f"{row}\t{mail}\t{talk}")
         return ("\n".join(out) + "\n").encode("latin-1")
 
+    def flags(self, data):
+        """The hosts' rows with a flags column: the ones set on the relay, or in lie-hosts mode words a hub
+        never writes, three hundred columns, and a host the list does not hold."""
+        if self.mode == "lie-hosts":
+            rows = [f"{HOST}\tonline\tsessions|close|bogus|\x1b[2J|sessions=0" + "\tx" * 300, "ghost\tonline\tsessions"]
+            return ("\n".join(rows) + "\n").encode("latin-1")
+        return set_column(data, 2, lambda f: self.hosts_flags.get(f[0], ""))
+
     def close(self):
         self.server.shutdown()
         self.server.server_close()
+
+
+def set_column(data, index, value):
+    """Every row of a text answer with the column at index set to value(fields), rows padded to reach it;
+    a hub that writes the column itself gets it replaced."""
+    out = []
+    for row in data.decode("latin-1").split("\n"):
+        if not row:
+            continue
+        f = row.split("\t")
+        f += [""] * (index + 1 - len(f))
+        f[index] = value(f)
+        out.append("\t".join(f))
+    return ("\n".join(out) + "\n").encode("latin-1")
 
 
 # --- the phone ---------------------------------------------------------------------
 
 # Where the emulator's skin buttons are, in window coordinates, and where to
 # click to give a text box focus, per device. The keypad is the same on both.
-KEYPAD = {"k1": (45, 363), "k2": (116, 363), "k3": (183, 363), "k5": (116, 399), "k8": (114, 432), "k9": (183, 432),
+KEYPAD = {"k1": (45, 363), "k2": (116, 363), "k3": (183, 363), "k5": (116, 399), "k7": (45, 432), "k8": (114, 432), "k9": (183, 432),
           "k0": (114, 467), "star": (45, 464), "pound": (183, 463)}
 SKINS = {
     "default": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (110, 150), **KEYPAD},
@@ -382,10 +497,14 @@ SKINS = {
 }
 # The writable pane's left-key menu as the emulator orders it: by priority, then as added.
 # Wake takes Later's place while the pane is parked.
+# Mail is there on a host that holds mail (the test agent does), Commands on a shell or Claude pane,
+# Close on an agent run with --allow-close.
 PANE_MENU = {"midp1": ["Keys", "Back", "Refresh", "Auto", "Pane", "Settings", "Exit"],
-             "midp2": ["Keys", "Back", "Image", "Refresh", "Auto", "Pane", "Later", "Settings", "Exit"]}
+             "midp2": ["Keys", "Back", "Image", "Refresh", "Auto", "Mail", "Commands", "Pane", "Later", "Settings", "Exit"]}
 # The pane list's menu the same way; Refresh sits on the right soft key.
-PANES_MENU = {"midp1": ["Settings", "Exit"], "midp2": ["Inbox", "Settings", "Exit"]}
+# + session and + pane follow Settings where some host or row allows them (the test agent's flags, or the relay's).
+PANES_MENU = {"midp1": ["Settings", "Exit"], "midp2": ["Inbox", "Messages", "Auto", "Settings", "Exit"]}
+PANES_MENU_PLUS = ["Inbox", "Messages", "Auto", "Settings", "+ session", "+ pane", "Exit"]
 
 
 class Phone:
@@ -394,6 +513,9 @@ class Phone:
         files: {name: bytes} to put in the phone's memory, which the emulator keeps under its home."""
         self.run, self.test, self.profile = run, test, profile
         self.device = "n96x65" if profile == "midp1" else "default"
+        # What the pane list's trace starts with: the 2.0 build heads the rows with the host's line.
+        self.list = "Panes: " if profile == "midp1" else f"Panes: = {HOST} online|"
+        self.lp = re.escape(self.list)
         self.skin = SKINS[self.device]
         self.dir = Path(run.tmp) / ("phone-" + secrets.token_hex(4))
         self.dir.mkdir()
@@ -467,13 +589,13 @@ class Phone:
             self.key("Down")
         self.click("right")  # Select
 
-    def pick(self, entry):
-        """An entry of the writable pane's menu, by name."""
-        self.menu(PANE_MENU[self.profile].index("Later" if entry == "Wake" else entry))
+    def pick(self, entry, menu=None):
+        """An entry of the writable pane's menu, by name; menu when the pane's differs from the usual one."""
+        self.menu((menu or PANE_MENU[self.profile]).index("Later" if entry == "Wake" else entry))
 
-    def pick_list(self, entry):
-        """An entry of the pane list's menu, by name."""
-        self.menu(PANES_MENU[self.profile].index(entry))
+    def pick_list(self, entry, menu=None):
+        """An entry of the pane list's menu, by name; menu when the list's differs from the usual one."""
+        self.menu((menu or PANES_MENU[self.profile]).index(entry))
 
     def shot(self, name):
         self.step += 1
