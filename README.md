@@ -44,7 +44,10 @@ little, and does it on purpose:
   works in and, for a named pane, what the program says about itself
   follow the name (`review /muxway · fixing the build (claude)`), panes
   that talk to each other are framed one under the other (`[` `]` at
-  the edge) and unread mail is counted after the name (`✉ 2`).
+  the edge) and unread mail is counted after the name (`✉ 2`); a line
+  per host heads its rows with the host's state, Claude and the other
+  harnesses are named as every client names them (`Claude · fixing the
+  build`), and *Auto* re-reads the list on a timer.
 - **Read** a pane, wrapped to the whole screen, refreshed on a timer or
   with a key; the phone asks the hub for Latin-1 so a phone of that age
   can draw it.
@@ -66,6 +69,17 @@ little, and does it on purpose:
   oldest first, from the list's menu or `9`; a question asked with fixed
   choices (`muxway ask`) is answered from it with a pick, nothing typed.
   See [the inbox](docs/features/inbox.md).
+- **Messages and mail** (MIDP 2.0 build): what panes said to panes,
+  oldest first, from the list's menu or `7`; a pane's mail, what came in
+  and what it sent; mail the pane, or mail back whoever wrote to it. See
+  [messages](docs/features/messages.md).
+- **New panes** (MIDP 2.0 build): `+ session` and `+ pane` on the
+  list's menu, Close on a pane's, where the host allows them, each behind
+  a box or a confirm list. See [new panes](docs/features/new-panes.md).
+- **The pane view** (MIDP 2.0 build): left and right open the previous
+  and the next pane, a Commands list sends a program's starters with
+  Enter, the overlay says what the pane waits for and `read-only`, and
+  Settings picks the theme, amber, green or paper.
 - **Later**: a pane its owner parked shows `zz` in the list and the
   inbox on both builds; on the MIDP 2.0 build *Later* and *Wake* on the
   pane's menu park and wake it, opening a parked pane wakes it, and the
@@ -83,6 +97,8 @@ under 30 KiB.
 - [Reply with an image](docs/features/images.md)
 - [The inbox, and answers to a question](docs/features/inbox.md)
 - [Later, a pane parked by its owner](docs/features/later.md)
+- [Messages and mail](docs/features/messages.md)
+- [New panes and sessions, and closing a pane](docs/features/new-panes.md)
 - [Running a relay](docs/features/relay.md)
 - [Architecture](docs/ARCHITECTURE.md)
 

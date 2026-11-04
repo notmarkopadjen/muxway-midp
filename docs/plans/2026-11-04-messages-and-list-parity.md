@@ -1,6 +1,6 @@
 # Feature: messages, mail and the list and pane view catching up
 
-> Status: proposed 2026-11-04, for the owner's review. The parity pass of
+> Status: approved 2026-11-04 as proposed; implemented in version 0.9.0. The parity pass of
 > that day: issues #46 (messages, the mail list, mailing a pane) and #47
 > (host lines, a list timer, D-pad next and previous, the harness name,
 > the overlay, a commands list, a theme setting; with the core's text
@@ -82,9 +82,9 @@ and words it does not know.
 
 | Call | Today | Proposed |
 |---|---|---|
-| `GET /v1/hosts` | `<name> TAB <online\|offline>` | a third column, the host's flags: the JSON's true booleans as words joined by `\|` in the JSON's names (`sessions\|close\|preview\|repeat\|ask\|mail\|dir\|later\|rename`), `keys=2` for the key grammar; empty when none. One column, so a new flag is a new word and never a new column |
-| `GET /v1/panes` | nine columns ending `alias TAB cwd` | a tenth, `under`: for a parked pane the kind of the attention underneath (`question`, `permission`, `idle`, `done`), empty otherwise |
-| `GET /v1/inbox` | five columns ending `choices` | a sixth, `under`, the same |
+| `GET /v1/hosts` | `<name> TAB <online\|offline>` | a third column, the host's flags: the JSON's true booleans as words joined by `\|` in the JSON's names (`sessions\|close\|preview\|repeat\|ask\|mail\|dir\|later\|rename`), `keys2` for the key grammar (the plan proposed `keys=2`); empty when none. One column, so a new flag is a new word and never a new column |
+| `GET /v1/panes` | nine columns ending `alias TAB cwd` | a tenth, `pending` (the plan proposed `under`; the core named it `pending`): for a parked pane the kind of the attention underneath (`question`, `permission`, `idle`, `done`), empty otherwise |
+| `GET /v1/inbox` | five columns ending `choices` | a sixth, `pending`, the same |
 | `GET /v1/panes/{address}/mail` | six columns ending `text` | a seventh, `replied`: `1` when the pane answered the mail, empty otherwise |
 
 Not asked for: `last` on a pane row (the Close question says the
@@ -533,11 +533,43 @@ helper in the harness.
 
 ## Review (after implementation)
 
-- [ ] Diff matches the plan, deviations explained here
-- [ ] Security rules (AGENTS.md section 2) hold
-- [ ] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
-- [ ] Docs and diagrams updated
+- [x] Diff matches the plan, deviations explained here
+- [x] Security rules (AGENTS.md section 2) hold: every new write
+      (mail, a session, a split, a close) needs the write grant and the
+      host's flag on the hub and the agent, and the phone offers it only
+      on writable rows and where the flags say so (S24, S28); forged
+      feed, mail, hosts and pending rows are cut, skipped or ignored and
+      never requested (S25, S26, S29); a session name is checked on the
+      phone (S27); the app asks for the listed paths and no other (S19);
+      no secret in any log (S99)
+- [x] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
+- [x] Docs and diagrams updated
 
-## Test run
+Deviations:
 
-Link to the recorded run: result, commit, logs, screenshots.
+- **The core named the columns** `pending` (the plan said `under`) and
+  the key-grammar word `keys2`; the phone reads those. The core's
+  guideline cells (muxway `parity-docs`) put `+ session` and `+ pane`
+  **on the list's menu**, acting on the row under the cursor, where the
+  plan had select on the host line and the pane's menu; the cells won,
+  since they are the product's contract: both are on the list's menu
+  now, confirmed, and a host line is a line and nothing more. Close
+  stays on the pane's menu as the cells say.
+- **The 1.0 build's share.** D-pad left and right fit. Nothing else
+  did: `M n` costs 260 bytes, the overlay's glyph and `read-only`
+  some 100, `zz !` 113, against the 432 the JAR had. The 1.0 JAR is
+  30695 bytes, 25 under the cap, after the D-pad, the tolerant hosts
+  reader and the shared code paths; the 2.0-only state moved into
+  classes of its own (`Hosts`, `Mail`, `Commands`, `Theme`) so that
+  ProGuard drops it there, and the 2.0 jobs out of the job switch, which
+  grew with every case whether folded or not.
+- **A group across hosts** is framed under each host as planned; a
+  row whose partners are all on another host wears `[` alone, which
+  the plan did not say.
+- **The list's names** no longer carry the mail count: the count is on
+  the row, the name (used by the inbox, Messages and Mail) is the
+  label without it.
+- **The overlay's mark follows Later and Wake** on the open pane, so
+  the slant and the mark agree before the next listing.
+- The feed is asked for with `limit=100` and no charset: the protocol
+  gives `GET /v1/talk` no `charset`.
