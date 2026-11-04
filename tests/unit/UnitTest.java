@@ -220,8 +220,11 @@ public final class UnitTest {
             wide += "x";
         }
         eq("choices_cut_at_40", String.valueOf(Text.choices("a|" + wide)[1].length()), "40");
-        eq("mark_per_kind", "" + Text.mark("question") + Text.mark("permission") + Text.mark("idle") + Text.mark("done") + Text.mark("") + Text.mark("working"),
+        eq("mark_per_kind", Text.mark("question") + Text.mark("permission") + Text.mark("idle") + Text.mark("done") + Text.mark("") + Text.mark("working"),
             "?!zv  ");
+        eq("mark_later_is_zz", Text.mark("later") + "|" + Text.mark("Later") + "|" + Text.mark("later "), "zz| | ");
+        eq("inbox_label_parked", Text.inboxLabel(Text.split("alice/work/0.0\tlater\t1\t\t", '\t'), "build (claude)"), "zz build (claude)");
+        eq("inbox_label_parked_keeps_the_question", Text.inboxLabel(Text.split("alice/work/0.0\tlater\t1\tdeploy?\tyes|no", '\t'), "build"), "zz build: deploy?");
     }
 
     private static void pixelTests() {
@@ -336,7 +339,7 @@ public final class UnitTest {
             + Text.imageType(new byte[] {(byte) 0x89, 'P', 'N', 'G', 13}) + Text.imageType(new byte[] {'G', 'I', 'F', '8'}) + Text.imageType(new byte[0]), "image/jpegimage/pngnullnull");
         eq("multipart_part", Api.partHead("b1", "image/jpeg") + "<bytes>" + Api.partTail("b1"),
             "--b1\r\nContent-Disposition: form-data; name=\"file\"; filename=\"file\"\r\nContent-Type: image/jpeg\r\n\r\n<bytes>\r\n--b1--\r\n");
-        eq("problem_415_507", Api.problem(415) + " " + Api.problem(507), "Not an image the host takes. The host's inbox is full.");
+        eq("problem_403_413", Api.problem(403) + " " + Api.problem(413), "Read only. Too long.");
         System.exit(failed == 0 ? 0 : 1);
     }
 }

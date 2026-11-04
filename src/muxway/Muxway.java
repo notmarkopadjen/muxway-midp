@@ -605,8 +605,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             boolean w = f[1].equals("write");
             // The unread mail after the name, from the sixth column where the hub sends one.
             String name = Text.label(f, several, Ui.TALK && f.length > 5 ? Text.mail(f[5], prefs.text == 0) : "");
-            // Then what the pane waits for, from the kind column: ? ! z v.
-            String label = (w ? "*" : " ") + Text.mark(f.length > 4 ? f[4].trim() : "") + name;
+            // Then what the pane waits for, from the kind column: ? ! z v, zz for a parked pane.
+            String mark = Text.mark(f.length > 4 ? f[4].trim() : "");
+            String label = (w ? "*" : " ") + mark + (mark.length() > 1 ? " " : "") + name;
             if (Ui.TALK) {
                 labels.addElement(label);
                 talk.addElement(f.length > 6 ? f[6] : "");
@@ -754,6 +755,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 alert(NO_INBOX, view);
             } else if (status == 413) {
                 alert("Too big (8 MiB at most).", view);
+            } else if (status == 415) {
+                alert("Not an image the host takes.", view);
+            } else if (status == 507) {
+                alert("The host's inbox is full.", view);
             } else {
                 problem(status);
             }

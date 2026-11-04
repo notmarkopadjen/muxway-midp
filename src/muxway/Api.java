@@ -186,15 +186,11 @@ final class Api {
             return "Not found.";
         case 413:
             return "Too long.";
-        case 415:
-            return "Not an image the host takes.";
         case 429:
             return "Too many tries. Wait and try again.";
         case 502:
         case 503:
             return "Host offline.";
-        case 507:
-            return "The host's inbox is full.";
         }
         return "Unexpected answer " + status + ".";
     }
