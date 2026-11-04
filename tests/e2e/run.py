@@ -65,7 +65,8 @@ class Run:
 
 def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*", write=f"{HOST}/*",
           props=None, revoke=False, before=None, says_claude=False, inbox=False, files=None, preview=False,
-          sessions=False, close=False):
+          sessions=False, close=False, flags=None):
+    """flags: the hosts' flags column the relay writes, set before the phone's first read."""
     logs = run.logs(name)
     core = Core(run, run.binary, logs).start(expose=expose, inbox=inbox, preview=preview, sessions=sessions, close=close)
     run.cleanups.append(core.close)
@@ -74,6 +75,8 @@ def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*",
         core.revoke_all()
     relay = Relay(core.url, logs, mode)
     relay.says_claude = says_claude
+    if flags:
+        relay.hosts_flags = {HOST: flags}
     run.cleanups.append(relay.close)
     if before:
         before(core)  # the tmux side a test wants in place before the phone looks
@@ -834,8 +837,7 @@ def s18(run, name, profile):
 @test("S19", "The app requests only the paths a relay forwards: the inbox, an answer, the feed, mail, a session, a split and a close included",
       "e2e-security", profiles=("midp2",))
 def s19(run, name, profile):
-    core, relay, phone, tok = setup(run, name, profile, before=asks, sessions=True, close=True)
-    relay.hosts_flags = {HOST: "sessions|close|mail|later|ask"}
+    core, relay, phone, tok = setup(run, name, profile, before=asks, sessions=True, close=True, flags="sessions|close|mail|later|ask")
     phone.expect("^" + phone.lp + r"\*\?test-pane", "pane list")
     phone.pick_list("Inbox")
     phone.expect(r"^Inbox: \? test-pane", "inbox")
@@ -1527,11 +1529,8 @@ def f44(run, name, profile):
 
 @test("S27", "A session name is checked on the phone: a path, 33 letters, a capital; nothing is asked", "e2e-security", profiles=("midp2",))
 def s27(run, name, profile):
-    core, relay, phone, tok = setup(run, name, profile)
-    relay.hosts_flags = {HOST: "sessions"}
+    core, relay, phone, tok = setup(run, name, profile, flags="sessions")
     phone.expect(r"^Panes: ", "pane list")
-    phone.click("right")  # Refresh, with the flag
-    time.sleep(2)
     phone.pick_list("+ session", PANES_MENU_PLUS)
     phone.expect(r"^Session " + HOST + "$", "the box")
     for bad in ("../x", "abcdefghijklmnopqrstuvwxyz0123456", "Scratch"):
@@ -1549,8 +1548,7 @@ def s27(run, name, profile):
 @test("S28", "A relay that lies about the mode on a host that closes: + pane and Close are offered, the hub refuses both",
       "e2e-security", profiles=("midp2",))
 def s28(run, name, profile):
-    core, relay, phone, tok = setup(run, name, profile, expose=None, mode="lie-writable", close=True)
-    relay.hosts_flags = {HOST: "close|mail"}
+    core, relay, phone, tok = setup(run, name, profile, expose=None, mode="lie-writable", close=True, flags="close|mail")
     phone.expect("^" + phone.lp + r"\* ", "the lying list")
     phone.click("select")
     phone.expect(r"^work/0\.0: ", "content")
@@ -1621,8 +1619,7 @@ def f42(run, name, profile):
 @test("F45", "+ session from the host's line, + pane beside or below, Close: each where the host allows it, with its confirm list",
       "e2e-ui", profiles=("midp2",))
 def f45(run, name, profile):
-    core, relay, phone, tok = setup(run, name, profile, sessions=True, close=True)
-    relay.hosts_flags = {HOST: "sessions|close|mail"}
+    core, relay, phone, tok = setup(run, name, profile, sessions=True, close=True, flags="sessions|close|mail")
     phone.expect(r"^Panes: ", "the list")
     phone.pick_list("+ session", PANES_MENU_PLUS)
     phone.expect(r"^Session " + HOST + "$", "the box")
