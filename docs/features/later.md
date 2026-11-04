@@ -20,11 +20,21 @@ character goes, on both builds:
 |---|---|
 | pane list | `*zz build (claude)`: the hub's order kept, a space after the two-letter mark |
 | inbox | `zz build (claude): deploy?`: after every awake pane, as the hub orders it; the text and the choices are the attention's underneath, if any |
-| pane view | plain; the `#` overlay's top row reads `> zz build (claude)` |
+| pane view | plain; the `#` overlay's top row reads `> zz build (claude)`, the name in italics on the MIDP 2.0 build |
 
 What waits underneath a parked pane (a question, a permission) is not
 carried in text mode; the inbox row still shows its text and offers its
 choices, and answering it wakes the pane on the host as any input does.
+
+## The slant (MIDP 2.0 build)
+
+The overlay's top row is this phone's header, and a parked pane's name
+is drawn there in the phone's italic face, after `zz`, as the core's
+guideline has it for every client's header: the mark and the slant are
+the only signs, no inversion, no pulse. *Wake*, or the wake as the pane
+opens, straightens it on the next paint. A phone whose font has no
+italics draws the plain face, and the mark alone stays; the list row is
+the phone's own `List` entry and keeps `zz` without a slant.
 
 ## The command (MIDP 2.0 build)
 
@@ -80,9 +90,9 @@ tries* for the hub's rate limit.
 
 ## The MIDP 1.0 build
 
-The small build shows the mark and nothing more: the command and the
-wake are a job and two menu entries the 30 KiB JAR has no room for
-(`Ui.LATER` is false there). A pane parked elsewhere is listed with
+The small build shows the mark and nothing more: the command, the
+wake and the slant are a job, two menu entries and a font the 30 KiB
+JAR has no room for (`Ui.LATER` is false there). A pane parked elsewhere is listed with
 `zz` and opens as any pane; it stays parked.
 
 ## The relay

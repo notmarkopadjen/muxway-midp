@@ -14,9 +14,11 @@ is on the pane list itself (see [the pane view](pane-view.md#the-list)).
 
 **Inbox** on the pane list's menu, or `9` on a pane, asks the hub for
 `GET /v1/inbox` in text mode and lists one row per waiting pane: the
-kind's mark, the pane as the list names it, and the text the program
-gave (`? build (claude): deploy to staging?`). Rows are cut at 64
-characters; a pane the list does not know is named by its address.
+kind's mark, the pane as the list names it (its alias where its owner
+gave one, see [the pane view](pane-view.md#the-list)), and the text the
+program gave (`? build (claude): deploy to staging?`, `? review /muxway
+· fixing the build (claude): deploy?`). Rows are cut at 64 characters; a
+pane the list does not know is named by its address.
 *Nothing waits.* when the inbox is empty. **Refresh** reads it again,
 **Back** returns to where it was opened from.
 

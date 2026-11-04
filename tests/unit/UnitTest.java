@@ -225,6 +225,21 @@ public final class UnitTest {
         eq("mark_later_is_zz", Text.mark("later") + "|" + Text.mark("Later") + "|" + Text.mark("later "), "zz| | ");
         eq("inbox_label_parked", Text.inboxLabel(Text.split("alice/work/0.0\tlater\t1\t\t", '\t'), "build (claude)"), "zz build (claude)");
         eq("inbox_label_parked_keeps_the_question", Text.inboxLabel(Text.split("alice/work/0.0\tlater\t1\tdeploy?\tyes|no", '\t'), "build"), "zz build: deploy?");
+        // The alias is the name on both builds; the folder and the status follow on the 2.0 build only.
+        String named = "alice/work/0.0\twrite\tclaude\t\u2733 fixing the build\t\t\t\treview\t/home/alice/src/project";
+        eq("label_alias_is_the_name", label(named, false), Ui.NAMES ? "review /project \u00b7 fixing the build (claude)" : "review (claude)");
+        eq("label_alias_with_the_host", label(named, true), Ui.NAMES ? "alice/review /project \u00b7 fixing the build (claude)" : "alice/review (claude)");
+        eq("label_alias_over_an_empty_title", label("alice/work/0.0\twrite\tbash\t\t\t\t\treview\t", false), "review (bash)");
+        eq("label_empty_alias_changes_nothing", label("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\t \t", false), "build (claude)");
+        eq("label_alias_cut_at_64", String.valueOf(label("alice/work/0.0\twrite\tbash\tt\t\t\t\t" + repeat('a', 300) + "\t", false).length()), "64");
+        if (Ui.NAMES) {
+            eq("label_folder_without_an_alias", label("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\t\t/home/alice/src/project", false), "build /project (claude)");
+            eq("label_folder_from_the_address", label("alice/work/0.1\twrite\tbash\t\t\t\t\t\t/home/alice", false), "work/0.1 /alice (bash)");
+            eq("label_folder_trailing_slash_is_none", label("alice/work/0.0\twrite\tbash\tbuild\t\t\t\t\t/home/alice/", false) + "|" + label("alice/work/0.0\twrite\tbash\tbuild\t\t\t\t\t/", false), "build (bash)|build (bash)");
+            eq("label_no_status_for_a_title_like_the_program", label("alice/work/0.0\twrite\tbash\tbash\t\t\t\treview\t", false), "review (bash)");
+            eq("label_status_dash_without_a_dot", Text.label(Text.split("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\treview\t", '\t'), false, "", false), "review - build (claude)");
+            eq("label_mail_after_the_folder_and_status", Text.label(Text.split(named + "\t", '\t'), false, Text.mail("2", true)), "review /project \u00b7 fixing the build \u2709 2 (claude)");
+        }
     }
 
     private static void pixelTests() {

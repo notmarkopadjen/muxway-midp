@@ -64,9 +64,9 @@ class Run:
 
 
 def setup(run, name, profile, mode="normal", expose="--write", read=f"{HOST}/*", write=f"{HOST}/*",
-          props=None, revoke=False, before=None, says_claude=False, inbox=False, files=None):
+          props=None, revoke=False, before=None, says_claude=False, inbox=False, files=None, preview=False):
     logs = run.logs(name)
-    core = Core(run, run.binary, logs).start(expose=expose, inbox=inbox)
+    core = Core(run, run.binary, logs).start(expose=expose, inbox=inbox, preview=preview)
     run.cleanups.append(core.close)
     tok = core.token(read=read, write=write)
     if revoke:
@@ -1071,6 +1071,99 @@ def f32(run, name, profile):
         check(not posts, "the 1.0 build posted a wake")
         check(len(rows) == 1 and "\tlater\t" in rows[0], f"the pane is not parked any more: {rows}")
     phone.shot("after-open")
+
+
+def named(core):
+    """The titled pane gets an alias, the second pane none."""
+    second_pane(core)
+    core.alias("work:0.0", "review")
+
+
+@test("S22", "A relay that forges the alias and folder columns: 300 letters, control characters, a path up, a stranger's address",
+      "e2e-security")
+def s22(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-names", before=three_panes)
+    phone.expect(r"^Panes: ", "pane list")
+    labels = panes_shown(phone)
+    check(len(labels) == 3, f"{len(labels)} entries, expected 3: {labels}")
+    check(all(len(l) <= 66 and all(c >= " " for c in l) for l in labels), f"a row too long or not printable: {labels!r}")
+    check(labels[0].startswith("* " + "a" * 60), f"the forged alias is not the name, cut: {labels[0]!r}")
+    # The stranger's address is a name like any other: the row opens the hub's pane, not the stranger's.
+    check(labels[2].startswith("* bob/work/0.0"), f"the third row: {labels[2]!r}")
+    if profile == "midp2":
+        check(labels[1] == "* ../../etc /.. \u00b7 test-pane-2 (bash)", f"the path up is text: {labels[1]!r}")
+    else:
+        check(labels[1] == "* ../../etc (bash)", f"no folder on the small build: {labels[1]!r}")
+    phone.shot("forged")
+    phone.key("Down", "Down")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.2 writable", "the row opens the pane of its first column")
+    phone.expect(r"^work/0\.2: ", "content")
+    check(not any(r["method"] == "POST" for r in relay.requests), f"something was posted: {[r['path'] for r in relay.requests]}")
+
+
+@test("S23", "A read-only token sees no folder: the hub keeps the path from a reader", "e2e-security", profiles=("midp2",))
+def s23(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, write=None, preview=True, before=named)
+    shown = phone.expect(r"^Panes: .*test-pane-2", "pane list")
+    check(shown == "Panes:   review \u00b7 test-pane (bash)|  test-pane-2 (bash)|", f"a reader was shown a folder: {shown!r}")
+    check("/project" not in "".join(l for l in phone.trace()), "the folder reached the phone")
+    phone.shot("reader")
+
+
+@test("F33", "The alias is the name: in the list, the overlay and the inbox; the folder and the status follow on the 2.0 build", "e2e-ui")
+def f33(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, preview=True, before=named)
+    if profile == "midp2":
+        want = "Panes: * review /project \u00b7 test-pane (bash)|* test-pane-2 /project (bash)|"
+    else:
+        want = "Panes: * review (bash)|* test-pane-2 (bash)|"
+    shown = phone.expect(r"^Panes: \* review", "the alias first")
+    check(shown == want, f"list: {shown!r}, want {want!r}")
+    phone.shot("named")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.0 writable", "the named pane opens")
+    phone.expect(r"^work/0\.0: ", "content")
+    phone.click("pound")
+    phone.expect(r"^Info on", "overlay")
+    time.sleep(1)
+    phone.shot("overlay")
+    if profile == "midp2":
+        n = len(phone.trace())
+        phone.pick("Back")
+        phone.expect(r"^Panes: \* review", "the list again", after=n)
+        core.notify("question", "deploy?")
+        time.sleep(1.2)
+        phone.pick_list("Inbox")
+        phone.expect(r"^Inbox: \? review /project \u00b7 test-pane \(bash\): deploy\?\|$", "the inbox names the alias")
+        phone.shot("inbox")
+
+
+@test("F34", "A parked pane's name slants in the overlay and straightens when woken", "e2e-ui", profiles=("midp2",))
+def f34(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile)
+    open_pane(phone)
+    phone.click("pound")
+    phone.expect(r"^Info on$", "overlay, plain")
+    phone.click("pound")
+    phone.pick("Later")
+    phone.expect(r"^Later true 204", "parked")
+    dismiss(phone)
+    n = len(phone.trace())
+    phone.click("pound")
+    phone.expect(r"^Info on italic$", "the name in the italic face", after=n)
+    time.sleep(1)
+    phone.shot("slanted")
+    phone.click("pound")
+    n = len(phone.trace())
+    phone.pick("Wake")
+    phone.expect(r"^Later false 204", "woken", after=n)
+    dismiss(phone)
+    n = len(phone.trace())
+    phone.click("pound")
+    phone.expect(r"^Info on$", "plain again", after=n)
+    time.sleep(1)
+    phone.shot("straight")
 
 
 # --- runner -------------------------------------------------------------------------

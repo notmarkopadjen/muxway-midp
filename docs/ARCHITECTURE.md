@@ -58,8 +58,11 @@ stateDiagram-v2
 ```
 
 - **Panes** is a `List` of the panes the token can read, from
-  `GET /v1/panes` in text mode, each by its title and program (`* build
-  (claude)`, or `work/0.1 (bash)` when the title says nothing); `*` marks
+  `GET /v1/panes` in text mode, each by its alias where its owner gave
+  one, else its title, and its program (`* review (claude)`, `* build
+  (claude)`, or `work/0.1 (bash)` when the title says nothing; the MIDP
+  2.0 build adds the pane's folder and a named pane's title,
+  `* review /muxway · fixing the build (claude)`); `*` marks
   writable ones, the character after it what the pane waits for (`?` `!`
   `z` `v`, `zz` for a pane parked for [later](features/later.md)),
   offline hosts follow with `-`.
@@ -135,9 +138,10 @@ What a relay has to pass, and all the app ever asks for:
   for [later](features/later.md). No other route: no `/v1/me`, no tree,
   no long-poll or events.
 - Text mode only: `Accept: text/plain`, and the answers are read as
-  `text/plain`. Of the pane listing's columns the MIDP 2.0 build reads
-  the two trailing ones too, `mail` and `talk`, where the hub writes
-  them; rows without them list as before.
+  `text/plain`. Of the pane listing's columns both builds read `alias`,
+  the eighth, and the MIDP 2.0 build also `mail`, `talk` and `cwd`, the
+  sixth, seventh and ninth, where the hub writes them; rows without
+  them list as before.
 - Query parameters: `charset=latin1` or `charset=ascii` on `panes` and on a
   pane read when the Text setting is not Unicode; `lines=<n>` and
   `width=400` on a pane read.

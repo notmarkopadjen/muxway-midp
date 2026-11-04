@@ -22,6 +22,8 @@ final class PaneView extends Canvas {
     private static final int SEND_KEY = -10;
 
     private final Font font = Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+    // The overlay's name while the pane is parked; the phone gives its plain face when it has no italics.
+    private Font italic;
     private final Image[] frames;
     private final Muxway app;
 
@@ -60,6 +62,9 @@ final class PaneView extends Canvas {
     PaneView(Image[] frames, Muxway app) {
         this.frames = frames;
         this.app = app;
+        if (Ui.LATER) {
+            italic = Font.getFont(Font.FACE_MONOSPACE, Font.STYLE_ITALIC, Font.SIZE_SMALL);
+        }
     }
 
     /** Columns that fit, or 0 before the first paint. */
@@ -217,7 +222,19 @@ final class PaneView extends Canvas {
             g.drawString(v[i], 0, y0 + i * lh, Graphics.TOP | Graphics.LEFT);
         }
         if (info) {
-            bar(g, y0, (writable ? "> " : "  ") + (Ui.LATER && later ? "zz " : "") + (name.length() > 0 ? name : title), null);
+            String lead = (writable ? "> " : "  ") + (Ui.LATER && later ? "zz " : "");
+            String shown = name.length() > 0 ? name : title;
+            if (Ui.LATER && later) {
+                // The mark and the slant are the only signs of a parked pane.
+                bar(g, y0, lead, null);
+                g.setColor(0xffffff);
+                g.setFont(italic);
+                g.drawString(shown, font.stringWidth(lead), y0, Graphics.TOP | Graphics.LEFT);
+                g.setFont(font);
+                g.setColor(0x000000);
+            } else {
+                bar(g, y0, lead + shown, null);
+            }
             int last = body.length - offset;
             int first = Math.max(0, last - bodyRows());
             bar(g, y0 + (n - 1) * lh, (first + 1) + "-" + last + "/" + body.length,
@@ -273,7 +290,7 @@ final class PaneView extends Canvas {
             return;
         case KEY_POUND:
             info = !info;
-            Trace.show("Info " + (info ? "on" : "off"));
+            Trace.show("Info " + (info ? "on" : "off") + (Ui.LATER && later ? " italic" : ""));
             repaint();
             return;
         case KEY_STAR:

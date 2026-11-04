@@ -19,6 +19,9 @@ final class Ui {
     // A parked pane shows its mark; the command and the wake need bytes the cap has not got.
     static final boolean LATER = false;
 
+    // The folder and the status after the name: columns the 96x65 row has no room for.
+    static final boolean NAMES = false;
+
     private Ui() {
     }
 }
