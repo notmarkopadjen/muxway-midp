@@ -573,3 +573,16 @@ Deviations:
   the slant and the mark agree before the next listing.
 - The feed is asked for with `limit=100` and no charset: the protocol
   gives `GET /v1/talk` no `charset`.
+
+## Test run
+
+Run 20261104-221241-d77cfea, recorded as [issue #48](https://github.com/notmarkopadjen/muxway-midp/issues/48):
+256 tests passed, none failed, both builds, against the core's
+`parity-docs` branch (5def017, muxway#290: the hosts' flags, `pending`
+and `replied` in text mode) with the hub built from it. The pull
+request's CI runs the same suite against the core's `main`; the relay
+adds the columns where the hub has none and replaces them where it has.
+F35's and F36's screenshots show the feed and a pane's mail, F37's the
+host lines and an offline host, F43's the three themes, F45's the
+session box and the two confirm lists, S26's the forged flags left as
+words. The Nokia test is Marko's.
