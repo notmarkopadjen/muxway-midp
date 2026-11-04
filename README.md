@@ -36,12 +36,15 @@ The screens as the test suite's emulator draws them, pixel for pixel:
 The screen is 96 by 65 pixels and the network is GPRS, so the app does
 little, and does it on purpose:
 
-- **List** every pane the token may see, named by what runs in it; `*`
+- **List** every pane the token may see, named by what runs in it, or
+  by the name its owner gave it (the alias, `* review (claude)`); `*`
   marks the ones you may type into, and `?` `!` `z` `v` after it what a
   pane waits for: a question, a permission, idle, done; a working pane
-  is plain, as on every client. On the MIDP 2.0
-  build, panes that talk to each other are framed one under the other
-  (`[` `]` at the edge) and unread mail is counted after the name (`✉ 2`).
+  is plain, as on every client. On the MIDP 2.0 build the folder a pane
+  works in and, for a named pane, what the program says about itself
+  follow the name (`review /muxway · fixing the build (claude)`), panes
+  that talk to each other are framed one under the other (`[` `]` at
+  the edge) and unread mail is counted after the name (`✉ 2`).
 - **Read** a pane, wrapped to the whole screen, refreshed on a timer or
   with a key; the phone asks the hub for Latin-1 so a phone of that age
   can draw it.
@@ -65,7 +68,8 @@ little, and does it on purpose:
   See [the inbox](docs/features/inbox.md).
 - **Later**: a pane its owner parked shows `zz` in the list and the
   inbox on both builds; on the MIDP 2.0 build *Later* and *Wake* on the
-  pane's menu park and wake it, and opening a parked pane wakes it. See
+  pane's menu park and wake it, opening a parked pane wakes it, and the
+  overlay draws its name in italics while it is parked. See
   [later](docs/features/later.md).
 
 Phones of that age cannot do current HTTPS, so the app talks to a hub
