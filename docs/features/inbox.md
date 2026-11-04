@@ -20,6 +20,12 @@ characters; a pane the list does not know is named by its address.
 *Nothing waits.* when the inbox is empty. **Refresh** reads it again,
 **Back** returns to where it was opened from.
 
+After every waiting pane come the panes their owner parked for
+[later](later.md), as the hub orders them, with `zz` for their mark and
+the text and choices of whatever waits underneath, if anything:
+`zz build (claude)`. Selecting one opens the pane and wakes it, on a
+writable pane (MIDP 2.0 build).
+
 Select a row and its pane opens, as from the pane list. A row whose
 question came with fixed choices (`muxway ask` on the host) opens the
 **Answer** list first: the choices, then *Open the pane*. Pick a choice
@@ -31,7 +37,7 @@ stateDiagram-v2
     [*] --> Panes
     Panes --> Inbox: Inbox
     Pane --> Inbox: 9
-    Inbox --> Pane: select a row without choices
+    Inbox --> Pane: select a row without choices (a parked pane wakes)
     Inbox --> Answer: select a row with choices
     Answer --> Inbox: a choice, sent, the inbox read again
     Answer --> Pane: Open the pane

@@ -8,7 +8,9 @@ name>`), and the program in brackets, `* muxway android (claude)`. `*`
 marks a pane the token may write to, taken from the hub's `mode` column
 and never from the title; the character after it says what the pane
 waits for, from the hub's `kind` column: `?` a question, `!` a
-permission, `z` idle, `v` done, a space for nothing (`*?build (claude)`);
+permission, `z` idle, `v` done, a space for nothing (`*?build (claude)`),
+and `zz` with a space after it for a pane its owner parked for
+[later](later.md) (`*zz build (claude)`);
 a mark leading the title (`✳`, or `*` once folded) is dropped, it is
 decoration. A title that says nothing, because it is empty,
 the program's name, or the host's name (tmux's default until a program
@@ -47,7 +49,7 @@ flowchart LR
     R["address TAB mode TAB command TAB title TAB kind"] --> T{title empty,<br/>= command<br/>or = host?}
     T -- no --> N["title (command)"]
     T -- yes --> A["session/window.pane (command)"]
-    N --> M["mark from mode: '*' or ' ', then from kind: '? ! z v' or ' '"]
+    N --> M["mark from mode: '*' or ' ', then from kind: '? ! z v', 'zz ' for later, or ' '"]
     A --> M
 ```
 
@@ -68,6 +70,7 @@ state:
 | waiting | the kind's character after the write mark, `?` `!` `z` `v`; the [inbox](inbox.md) says what for | drawn as it is; `9` opens the inbox |
 | working | plain: no glyph, no word. The hub's `working` event clears the pane's attention and the listing's `kind` column is empty, and the screen moves | plain |
 | quiet | plain | plain |
+| [later](later.md) | `zz` where the kind's character goes, the hub's order kept | plain; the overlay reads `> zz name`; *Later* and *Wake* on the menu (MIDP 2.0) |
 
 A working row therefore looks like a quiet one; the pane's own screen
 tells them apart. A mark for working would need the listing to carry
@@ -111,8 +114,8 @@ characters.
 | green call key | send Enter (writable panes) |
 
 The same list is printed at the bottom of Settings. The left soft key menu
-still offers Reply, Keys, Image (MIDP 2.0), Refresh, Auto, Pane, Back and
-Settings.
+still offers Reply, Keys, Image (MIDP 2.0), Refresh, Auto, Pane, Later or
+Wake (writable panes, MIDP 2.0, see [later](later.md)), Back and Settings.
 
 ## Pane
 
@@ -139,7 +142,8 @@ stateDiagram-v2
 ## Overlay
 
 `#` draws two inverted rows over the pane: the top one with `>` for a
-writable pane and the pane's name as the list showed it, the bottom one with the rows on screen
+writable pane, `zz` for a pane parked for [later](later.md), and the
+pane's name as the list showed it, the bottom one with the rows on screen
 out of the rows the app holds (`7-12/40`) and, when it fits next to that,
 the key hints. `#` again removes them. While a request is out a small wait
 bar runs in the top right corner, overlay or not.
