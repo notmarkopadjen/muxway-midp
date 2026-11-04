@@ -431,7 +431,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
     /**
      * Runs one job on its own thread; the UI thread must not touch the network.
-     * MIDP has no request timeout, so a watchdog gives up on a job that hangs
+     * MIDP has no request timeout, so the spinner gives up on a job that hangs
      * and the app stays usable; a late answer from it is then ignored.
      */
     private synchronized boolean start(int what, String with) {
@@ -449,18 +449,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             waitNote.setText(Ui.INBOX && what == INBOX ? "Loading inbox..." : "Loading panes...");
             display.setCurrent(wait);
         }
-        spin(what);
+        spin(what, mine, what == UPLOAD ? UPLOAD_TIMEOUT : TIMEOUT);
         new Thread(this).start();
-        final long patience = what == UPLOAD ? UPLOAD_TIMEOUT : TIMEOUT;
-        new Thread() {
-            public void run() {
-                try {
-                    Thread.sleep(patience);
-                } catch (InterruptedException e) {
-                }
-                giveUp(mine);
-            }
-        }.start();
         return true;
     }
 
@@ -487,7 +477,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
     }
 
-    private void spin(final int what) {
+    /** Turns the wait mark while the job runs, and gives the job up once it has run for patience. */
+    private void spin(final int what, final int mine, final long patience) {
         new Thread() {
             public void run() {
                 int step = 0;
@@ -501,6 +492,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                     try {
                         Thread.sleep(150);
                     } catch (InterruptedException e) {
+                    }
+                    if (step * 150L >= patience) {
+                        giveUp(mine);
                     }
                 }
                 if (view != null) {
@@ -633,7 +627,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             // The mark comes from the hub's mode column, never from the title.
             boolean w = f[1].equals("write");
             // The unread mail after the name, from the sixth column where the hub sends one.
-            String name = Text.label(f, several, Ui.TALK && f.length > 5 ? Text.mail(f[5], prefs.text == 0) : "");
+            String name = Text.label(f, several, Ui.TALK && f.length > 5 ? Text.mail(f[5], prefs.text == 0) : "",
+                prefs.text != 2);
             // Then what the pane waits for, from the kind column: ? ! z v, zz for a parked pane.
             String kind = f.length > 4 ? f[4].trim() : "";
             String mark = Text.mark(kind);

@@ -79,7 +79,8 @@ final class Text {
 
     /**
      * What the pane list shows for one row of the hub's text list
-     * (address, mode, command, title, kind): the title and, in brackets,
+     * (address, mode, command, title, kind, mail, talk, alias, cwd): the
+     * alias where the owner gave one, else the title, and, in brackets,
      * the program. A title that is empty, the program's name or the host's
      * name says nothing, so the pane's session/window.pane stands in; a
      * leading mark is dropped. With
@@ -91,6 +92,15 @@ final class Text {
 
     /** The same with the mail mark after the name, before the program, so a cut keeps it. */
     static String label(String[] f, boolean hosts, String mail) {
+        return label(f, hosts, mail, true);
+    }
+
+    /**
+     * The same, with the folder and the status of the 2.0 build after the
+     * name: the last segment of the cwd column, then for a named pane the
+     * title the alias replaced, after a middle dot (a dash without one).
+     */
+    static String label(String[] f, boolean hosts, String mail, boolean dot) {
         String address = f[0];
         int slash = address.indexOf('/');
         String host = slash < 0 ? address : address.substring(0, slash);
@@ -103,9 +113,24 @@ final class Text {
         } else if (title.equals("\u2733") || title.equals("*")) {
             title = "";
         }
-        String name = title.length() == 0 || title.equals(command) || title.equals(host) ? rest : title;
+        if (title.equals(command) || title.equals(host)) {
+            title = "";
+        }
+        // The owner's alias is the name; the title is what the program says about itself.
+        String alias = f.length > 7 ? f[7].trim() : "";
+        String name = alias.length() > 0 ? alias : title.length() == 0 ? rest : title;
         if (hosts) {
             name = host + "/" + name;
+        }
+        if (Ui.NAMES) {
+            String cwd = f.length > 8 ? f[8].trim() : "";
+            String folder = cwd.substring(cwd.lastIndexOf('/') + 1);
+            if (folder.length() > 0) {
+                name += " /" + folder;
+            }
+            if (alias.length() > 0 && title.length() > 0) {
+                name += (dot ? " \u00b7 " : " - ") + title;
+            }
         }
         if (Ui.TALK && mail.length() > 0) {
             // The name gives way, the count stays within the cut.

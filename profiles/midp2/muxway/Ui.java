@@ -19,6 +19,9 @@ final class Ui {
     // Later and Wake on a pane's menu, and the wake of a parked pane as it opens.
     static final boolean LATER = true;
 
+    // The folder and the status after the name, from the listing's last two columns.
+    static final boolean NAMES = true;
+
     private Ui() {
     }
 }
