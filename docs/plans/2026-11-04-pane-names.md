@@ -241,7 +241,7 @@ Deviations:
   way is not the manifest the plan named first but the watchdog thread:
   the spinner, which runs for the same job and wakes every 150 ms
   anyway, now gives the job up once it has run for its patience, and
-  the third anonymous class is gone. The 1.0 JAR is 30289 bytes, 431
+  the third anonymous class is gone. The 1.0 JAR is 30288 bytes, 432
   under the cap. The timeout fires on the spinner's tick, at most 150 ms
   later than before.
 - The reader's check moved out of S22 into its own S23 (MIDP 2.0): S22
@@ -251,4 +251,13 @@ Deviations:
 
 ## Test run
 
-(after the run)
+Run 20261104-131030-6865d27, recorded as [issue #43](https://github.com/notmarkopadjen/muxway-midp/issues/43):
+220 tests passed, none failed, both builds, against the core's `main`
+(1b2a71a, with the two columns of muxway#261). F33's screenshots show
+the named pane first in the list on both builds, with the folder and
+the status on MIDP 2.0, and in the inbox; F34's show the overlay's name
+slanted while the pane is parked and straight after *Wake*; S22's the
+forged columns cut to the row. The run before it at d377349
+([issue #42](https://github.com/notmarkopadjen/muxway-midp/issues/42))
+was red on two faults of the emulator itself (S05, S06), green alone;
+the harness gives the soft-key menu more time since.
