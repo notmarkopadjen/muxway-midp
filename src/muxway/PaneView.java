@@ -32,6 +32,8 @@ final class PaneView extends Canvas {
     boolean writable;
     // The host takes files for this pane, as the probe found.
     boolean inbox;
+    // Parked for later by its owner; the overlay says so.
+    boolean later;
     Lens[] lenses = new Lens[0];
     // The program in the pane, as the hub named it; Auto picks a lens by it first.
     String command = "";
@@ -215,7 +217,7 @@ final class PaneView extends Canvas {
             g.drawString(v[i], 0, y0 + i * lh, Graphics.TOP | Graphics.LEFT);
         }
         if (info) {
-            bar(g, y0, (writable ? "> " : "  ") + (name.length() > 0 ? name : title), null);
+            bar(g, y0, (writable ? "> " : "  ") + (Ui.LATER && later ? "zz " : "") + (name.length() > 0 ? name : title), null);
             int last = body.length - offset;
             int first = Math.max(0, last - bodyRows());
             bar(g, y0 + (n - 1) * lh, (first + 1) + "-" + last + "/" + body.length,

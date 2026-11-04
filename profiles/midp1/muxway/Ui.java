@@ -16,6 +16,9 @@ final class Ui {
     // Talk groups and mail counts: a class and a few joins the cap has no room for either.
     static final boolean TALK = false;
 
+    // A parked pane shows its mark; the command and the wake need bytes the cap has not got.
+    static final boolean LATER = false;
+
     private Ui() {
     }
 }

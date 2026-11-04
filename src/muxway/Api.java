@@ -211,4 +211,9 @@ final class Api {
     static String key(String name) {
         return "{\"key\":\"" + name + "\"}";
     }
+
+    /** JSON body of the later call: park the pane, or wake it. */
+    static String later(boolean on) {
+        return "{\"later\":" + (on ? "true" : "false") + "}";
+    }
 }

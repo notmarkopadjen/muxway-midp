@@ -340,6 +340,7 @@ public final class UnitTest {
         eq("multipart_part", Api.partHead("b1", "image/jpeg") + "<bytes>" + Api.partTail("b1"),
             "--b1\r\nContent-Disposition: form-data; name=\"file\"; filename=\"file\"\r\nContent-Type: image/jpeg\r\n\r\n<bytes>\r\n--b1--\r\n");
         eq("problem_403_413", Api.problem(403) + " " + Api.problem(413), "Read only. Too long.");
+        eq("later_body", Api.later(true) + Api.later(false), "{\"later\":true}{\"later\":false}");
         System.exit(failed == 0 ? 0 : 1);
     }
 }

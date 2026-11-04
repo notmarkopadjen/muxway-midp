@@ -16,6 +16,9 @@ final class Ui {
     // Talk groups and mail counts from the listing's two trailing columns.
     static final boolean TALK = true;
 
+    // Later and Wake on a pane's menu, and the wake of a parked pane as it opens.
+    static final boolean LATER = true;
+
     private Ui() {
     }
 }
