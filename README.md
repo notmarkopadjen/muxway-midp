@@ -63,6 +63,10 @@ little, and does it on purpose:
   oldest first, from the list's menu or `9`; a question asked with fixed
   choices (`muxway ask`) is answered from it with a pick, nothing typed.
   See [the inbox](docs/features/inbox.md).
+- **Later**: a pane its owner parked shows `zz` in the list and the
+  inbox on both builds; on the MIDP 2.0 build *Later* and *Wake* on the
+  pane's menu park and wake it, and opening a parked pane wakes it. See
+  [later](docs/features/later.md).
 
 Phones of that age cannot do current HTTPS, so the app talks to a hub
 through a small [relay](docs/features/relay.md) that terminates TLS, with
@@ -74,6 +78,7 @@ under 30 KiB.
 - [Lenses, and the Claude Code lens](docs/features/lenses.md)
 - [Reply with an image](docs/features/images.md)
 - [The inbox, and answers to a question](docs/features/inbox.md)
+- [Later, a pane parked by its owner](docs/features/later.md)
 - [Running a relay](docs/features/relay.md)
 - [Architecture](docs/ARCHITECTURE.md)
 

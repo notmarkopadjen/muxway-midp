@@ -767,7 +767,7 @@ def f25(run, name, profile):
 
 # --- the inbox and answers ---------------------------------------------------------
 
-ALLOWED = re.compile(r"^/v1/(hosts|panes|inbox)(\?[^/]*)?$|^/v1/panes/[^/?]+/[^/?]+/[^/?]+(/(input|answer|files))?(\?[^/]*)?$")
+ALLOWED = re.compile(r"^/v1/(hosts|panes|inbox)(\?[^/]*)?$|^/v1/panes/[^/?]+/[^/?]+/[^/?]+(/(input|answer|files|later))?(\?[^/]*)?$")
 
 
 def asks(core):
@@ -964,6 +964,113 @@ def f28(run, name, profile):
         phone.shot("inbox-by-9")
     else:
         check(not opened and not asked, "the MIDP 1.0 build asked for the inbox")
+
+
+# --- later -------------------------------------------------------------------------
+
+def later_posts(relay):
+    return [r for r in relay.requests if r["method"] == "POST" and r["path"].endswith("/later")]
+
+
+def parked(core, target="work:0.0"):
+    """Another client parks the pane before the phone looks."""
+    core.later(core.token(), f"{HOST}/{target.replace(':', '/')}", True)
+    time.sleep(1.2)  # the hub lists from a one-second cache
+
+
+@test("S21", "Read-only token: a parked pane shows its mark and opens without a wake; a forged later column is a mark only",
+      "e2e-security")
+def s21(run, name, profile):
+    def two(core):
+        second_pane(core)
+        parked(core)
+    core, relay, phone, tok = setup(run, name, profile, write=None, mode="lie-later", before=two)
+    shown = phone.expect(r"^Panes:  zz test-pane \(bash\)", "the parked mark on a read-only row")
+    check(shown == "Panes:  zz test-pane (bash)| zz test-pane-2 (bash)|", f"list: {shown!r}")
+    phone.shot("marks")
+    phone.click("select")  # the pane the hub parked: a reader opens it, nothing is posted
+    phone.expect(r"^View " + HOST + r"/work/0\.0 read-only", "read-only view")
+    phone.expect(r"^work/0\.0: ", "content of the parked pane")
+    time.sleep(1)
+    check(not any(r["method"] == "POST" for r in relay.requests), f"a reader posted: {[r['path'] for r in relay.requests]}")
+    rows = core.waiting(tok)
+    check(len(rows) == 1 and "\tlater\t" in rows[0], f"the pane is not parked any more: {rows}")
+    phone.shot("opened-read-only")
+
+
+@test("F31", "Later on the pane's menu parks it: zz in the list, last in the inbox; opening it from the inbox wakes it; Wake wakes it",
+      "e2e-ui", profiles=("midp2",))
+def f31(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=host_named_pane)
+    open_pane(phone)
+    phone.pick("Later")
+    phone.expect(r"^Later true 204", "parked on the hub")
+    phone.expect(r"^Alert: Parked for later", "told so")
+    phone.shot("parked")
+    dismiss(phone)
+    rows = core.waiting(tok)
+    check(len(rows) == 1 and rows[0].startswith(f"{HOST}/work/0.0\tlater\t"), f"the hub's inbox: {rows}")
+    phone.click("pound")
+    phone.expect(r"^Info on", "overlay")
+    time.sleep(1)
+    phone.shot("overlay")
+    n = len(phone.trace())
+    phone.pick("Back")
+    phone.expect(r"^Panes: \*zz test-pane \(bash\)\|\* work/0\.1 \(bash\)\|$", "the mark in the list", after=n)
+    phone.shot("parked-list")
+    # A question on the other pane, younger than the parking: the inbox lists it first all the same.
+    core.notify("question", "deploy?", "work:0.1")
+    time.sleep(1.2)
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: \? work/0\.1 \(bash\): deploy\?\|zz test-pane \(bash\)\|$", "awake first, parked last")
+    phone.shot("parked-inbox")
+    phone.key("Down")
+    n = len(phone.trace())
+    phone.click("select")  # the parked row: open, and wake
+    phone.expect(r"^View " + HOST + r"/work/0\.0 writable", "the parked pane opened", after=n)
+    phone.expect(r"^Later false 204", "woken as it opened", after=n)
+    phone.expect(r"^work/0\.0: ", "content", after=n)
+    posts = later_posts(relay)
+    check(len(posts) == 2 and posts[1]["body"] == b'{"later":false}', f"the wake: {[(p['path'], p['body']) for p in posts]}")
+    phone.shot("woken")
+    n = len(phone.trace())
+    phone.pick("Back")
+    phone.expect(r"^Panes: \* test-pane \(bash\)\|\*\?work/0\.1", "plain again, the question still there", after=n)
+    # Later, then Wake from the menu.
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content", after=n)
+    phone.pick("Later")
+    phone.expect(r"^Later true 204", "parked again", after=n)
+    dismiss(phone)
+    n = len(phone.trace())
+    phone.pick("Wake")
+    phone.expect(r"^Later false 204", "woken from the menu", after=n)
+    phone.expect(r"^Alert: Awake", "told so", after=n)
+    phone.shot("awake")
+    rows = core.waiting(tok)
+    check(len(rows) == 1 and "\tquestion\t" in rows[0], f"the hub's inbox after the wake: {rows}")
+
+
+@test("F32", "A pane parked elsewhere: zz on both builds; opening it wakes it on the 2.0 build and leaves it on the 1.0 build", "e2e-ui")
+def f32(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=parked)
+    phone.expect(r"^Panes: \*zz test-pane \(bash\)", "the parked mark")
+    phone.shot("parked")
+    phone.click("select")
+    phone.expect(r"^work/0\.0: ", "content")
+    time.sleep(1)
+    posts = later_posts(relay)
+    rows = core.waiting(tok)
+    if profile == "midp2":
+        check(len(posts) == 1 and posts[0]["body"] == b'{"later":false}', f"the open did not wake the pane: {posts}")
+        check(not rows, f"still in the hub's inbox: {rows}")
+        n = len(phone.trace())
+        phone.pick("Back")
+        phone.expect(r"^Panes: \* test-pane \(bash\)", "plain again", after=n)
+    else:
+        check(not posts, "the 1.0 build posted a wake")
+        check(len(rows) == 1 and "\tlater\t" in rows[0], f"the pane is not parked any more: {rows}")
+    phone.shot("after-open")
 
 
 # --- runner -------------------------------------------------------------------------

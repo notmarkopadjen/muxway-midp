@@ -21,7 +21,7 @@ import javax.microedition.midlet.MIDlet;
 /** muxway for Java ME phones: pick a pane, read it, reply, send a key. */
 public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private static final int LIST = 1, OPEN = 2, REFRESH = 3, POLL = 4, SEND = 5, TYPE = 6, KEY = 7, PROBE = 8, UPLOAD = 9,
-        INBOX = 10, ANSWER = 11;
+        INBOX = 10, ANSWER = 11, LATER = 12;
 
     // Labels on the phone, names in the protocol.
     private static final String[][] KEYS = {
@@ -62,6 +62,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Vector names = new Vector();
     private final Vector commands = new Vector();
     private final Vector writable = new Vector();
+    // Whether each row's pane is parked for later; MIDP 2.0 build only.
+    private Vector later;
     private PaneView view;
     private final TextBox reply = new TextBox("Reply", "", 500, TextField.ANY);
     private final List keys = new List("Keys", List.IMPLICIT);
@@ -78,6 +80,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Command keysCmd = new Command("Keys", Command.SCREEN, 2);
     private final Command imageCmd = new Command("Image", Command.SCREEN, 3);
     private final Command inboxCmd = Ui.INBOX ? new Command("Inbox", Command.SCREEN, 4) : null;
+    // One of the two is on a writable pane's menu, by the pane's state; MIDP 2.0 build only.
+    private Command laterCmd;
+    private Command wakeCmd;
     private final Command refreshCmd = new Command("Refresh", Command.SCREEN, 3);
     private final Command autoCmd = new Command("Auto", Command.SCREEN, 4);
     private final Command back = new Command("Back", Command.BACK, 2);
@@ -110,6 +115,11 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
         if (Ui.INBOX) {
             panes.addCommand(inboxCmd);
+        }
+        if (Ui.LATER) {
+            later = new Vector();
+            laterCmd = new Command("Later", Command.SCREEN, 5);
+            wakeCmd = new Command("Wake", Command.SCREEN, 5);
         }
         panes.addCommand(refreshCmd);
         panes.addCommand(settings);
@@ -229,6 +239,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             if (auto) {
                 poll();
             }
+        } else if (Ui.LATER && d == view && (c == laterCmd || c == wakeCmd)) {
+            start(LATER, null);
         } else if (c == replyCmd) {
             shortcut(PaneView.REPLY);
         } else if (c == keysCmd) {
@@ -384,6 +396,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view.name = (String) names.elementAt(i);
         view.command = (String) commands.elementAt(i);
         view.writable = canWrite;
+        if (Ui.LATER) {
+            view.later = ((Boolean) later.elementAt(i)).booleanValue();
+        }
         view.cols = prefs.width;
         view.lenses = LENSES;
         view.mode = prefs.view(address);
@@ -397,6 +412,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view.addCommand(refreshCmd);
         view.addCommand(autoCmd);
         view.addCommand(paneCmd);
+        if (Ui.LATER && canWrite) {
+            view.addCommand(view.later ? wakeCmd : laterCmd);
+        }
         view.addCommand(back);
         view.addCommand(settings);
         view.addCommand(exit);
@@ -503,6 +521,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 list();
                 break;
             case OPEN:
+                if (Ui.LATER && view.later && view.writable) {
+                    wake();
+                }
                 for (int i = 0; i < 20 && !view.ready(); i++) {
                     Thread.sleep(50);
                 }
@@ -550,6 +571,11 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                     readInbox();
                 }
                 break;
+            case LATER:
+                if (Ui.LATER) {
+                    later(!view.later);
+                }
+                break;
             }
         } catch (IOException e) {
             if (current(mine)) {
@@ -580,6 +606,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         names.removeAllElements();
         commands.removeAllElements();
         writable.removeAllElements();
+        if (Ui.LATER) {
+            later.removeAllElements();
+        }
         // Hosts are named in the list only when there is more than one.
         String host = null;
         boolean several = false;
@@ -605,8 +634,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             boolean w = f[1].equals("write");
             // The unread mail after the name, from the sixth column where the hub sends one.
             String name = Text.label(f, several, Ui.TALK && f.length > 5 ? Text.mail(f[5], prefs.text == 0) : "");
-            // Then what the pane waits for, from the kind column: ? ! z v.
-            String label = (w ? "*" : " ") + Text.mark(f.length > 4 ? f[4].trim() : "") + name;
+            // Then what the pane waits for, from the kind column: ? ! z v, zz for a parked pane.
+            String kind = f.length > 4 ? f[4].trim() : "";
+            String mark = Text.mark(kind);
+            String label = (w ? "*" : " ") + mark + (mark.length() > 1 ? " " : "") + name;
             if (Ui.TALK) {
                 labels.addElement(label);
                 talk.addElement(f.length > 6 ? f[6] : "");
@@ -618,6 +649,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             names.addElement(name);
             commands.addElement(f[2].trim());
             writable.addElement(new Boolean(w));
+            if (Ui.LATER) {
+                later.addElement(new Boolean(kind.equals("later")));
+            }
         }
         if (Ui.TALK) {
             arrange(labels, talk, shown);
@@ -649,7 +683,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         int[] group = Talk.groups(addresses, talk);
         int[] order = Talk.order(group);
         boolean framed = Talk.any(group);
-        Vector[] kept = {addresses, names, commands, writable};
+        Vector[] kept = {addresses, names, commands, writable, later};
         Object[][] was = new Object[kept.length][];
         for (int k = 0; k < kept.length; k++) {
             was[k] = new Object[kept[k].size()];
@@ -716,6 +750,35 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         return false;
     }
 
+    /** Opening a parked pane is the owner coming back: the hub's answer is traced, the read goes on either way. */
+    private void wake() throws IOException {
+        int status = api.call("panes/" + view.address + "/later", Api.later(false), null);
+        Trace.show("Later false " + status);
+        if (status == 204 || status == 200) {
+            parked(false);
+        }
+    }
+
+    /** Parks the open pane or wakes it: the owner's mark on the host, seen by every client. */
+    private void later(boolean on) throws IOException {
+        int status = api.call("panes/" + view.address + "/later", Api.later(on), null);
+        Trace.show("Later " + on + " " + status);
+        if (status == 204 || status == 200) {
+            parked(on);
+            alert(on ? "Parked for later." : "Awake.", view);
+        } else if (status == 404) {
+            alert("This host does not park panes.", view);
+        } else {
+            problem(status);
+        }
+    }
+
+    private void parked(boolean on) {
+        view.later = on;
+        view.removeCommand(on ? laterCmd : wakeCmd);
+        view.addCommand(on ? wakeCmd : laterCmd);
+    }
+
     private boolean input(String json) throws IOException {
         int status = api.call("panes/" + view.address + "/input", json, null);
         // 204 from a hub; 200 from a relay that cannot pass an empty answer on.
@@ -754,6 +817,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 alert(NO_INBOX, view);
             } else if (status == 413) {
                 alert("Too big (8 MiB at most).", view);
+            } else if (status == 415) {
+                alert("Not an image the host takes.", view);
+            } else if (status == 507) {
+                alert("The host's inbox is full.", view);
             } else {
                 problem(status);
             }

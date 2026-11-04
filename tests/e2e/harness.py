@@ -159,6 +159,17 @@ class Core:
         self.tmux_cmd("send-keys", "-t", target, "-l", cmd)
         self.tmux_cmd("send-keys", "-t", target, "Enter")
 
+    def later(self, tok, address, on):
+        """Parks a pane or wakes it on the hub, as another client would."""
+        c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
+        c.request("POST", f"/v1/panes/{address}/later", body=json.dumps({"later": on}),
+                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+        r = c.getresponse()
+        r.read()
+        c.close()
+        if r.status != 204:
+            raise RuntimeError(f"later {address} {on}: {r.status}")
+
     def waiting(self, tok):
         """The hub's inbox in text mode, one row per waiting pane."""
         c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
@@ -272,6 +283,15 @@ class Relay:
                     data = f"{HOST}/work/0.0\tquestion\t1\tpick one\t{'|'.join(choices)}\n".encode()
                 if relay.mode in ("talk", "lie-talk") and self.path.split("?")[0] == "/v1/panes":
                     data = relay.columns(data)
+                if relay.mode == "lie-later" and self.path.split("?")[0] == "/v1/panes":
+                    # The kind column says later on a pane the hub lists awake.
+                    rows = []
+                    for row in data.decode("latin-1").split("\n"):
+                        f = row.split("\t")
+                        if f[0] == f"{HOST}/work/0.1" and len(f) > 4:
+                            f[4] = "later"
+                        rows.append("\t".join(f))
+                    data = "\n".join(rows).encode("latin-1")
                 if relay.mode == "lie-title" and self.path.split("?")[0] == "/v1/panes":
                     # Titles a program could choose: one that looks like a writable entry, one too long.
                     data = (f"{HOST}/work/0.0\tread\tbash\t* {HOST}/work/0.0 claude\twrite\tx\n"
@@ -334,8 +354,9 @@ SKINS = {
     "n96x65": {"left": (43, 320), "right": (183, 320), "select": (113, 320), "text": (88, 95), **KEYPAD},
 }
 # The writable pane's left-key menu as the emulator orders it: by priority, then as added.
+# Wake takes Later's place while the pane is parked.
 PANE_MENU = {"midp1": ["Keys", "Back", "Refresh", "Auto", "Pane", "Settings", "Exit"],
-             "midp2": ["Keys", "Back", "Image", "Refresh", "Auto", "Pane", "Settings", "Exit"]}
+             "midp2": ["Keys", "Back", "Image", "Refresh", "Auto", "Pane", "Later", "Settings", "Exit"]}
 # The pane list's menu the same way; Refresh sits on the right soft key.
 PANES_MENU = {"midp1": ["Settings", "Exit"], "midp2": ["Inbox", "Settings", "Exit"]}
 
@@ -421,7 +442,7 @@ class Phone:
 
     def pick(self, entry):
         """An entry of the writable pane's menu, by name."""
-        self.menu(PANE_MENU[self.profile].index(entry))
+        self.menu(PANE_MENU[self.profile].index("Later" if entry == "Wake" else entry))
 
     def pick_list(self, entry):
         """An entry of the pane list's menu, by name."""

@@ -136,18 +136,20 @@ final class Text {
         return (unicode ? "\u2709 " : "M ") + column;
     }
 
-    /** One character for the kind column of a listing: what the pane waits for, a space for nothing. */
-    static char mark(String kind) {
+    /** The kind column of a listing as a mark: what the pane waits for, zz once its owner parked it, a space for nothing. */
+    static String mark(String kind) {
         if (kind.equals("question")) {
-            return '?';
+            return "?";
         } else if (kind.equals("permission")) {
-            return '!';
+            return "!";
         } else if (kind.equals("idle")) {
-            return 'z';
+            return "z";
         } else if (kind.equals("done")) {
-            return 'v';
+            return "v";
+        } else if (kind.equals("later")) {
+            return "zz";
         }
-        return ' ';
+        return " ";
     }
 
     /**

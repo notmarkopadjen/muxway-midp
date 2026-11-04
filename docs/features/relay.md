@@ -8,8 +8,9 @@ plain HTTP from the phone and forwards it to the hub over HTTPS.
 
 - Forward `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}`,
   `POST /v1/panes/{address}/input`, and for the MIDP 2.0 build `GET` and
-  `POST /v1/panes/{address}/files`, `GET /v1/inbox` and `POST
-  /v1/panes/{address}/answer`, to the hub, with their query string
+  `POST /v1/panes/{address}/files`, `GET /v1/inbox`, `POST
+  /v1/panes/{address}/answer` and `POST /v1/panes/{address}/later`, to
+  the hub, with their query string
   and the headers `X-Muxway-Token`, `Accept`, `Content-Type` and the
   body. These are the only paths the app requests (see
   [the protocol features used](../ARCHITECTURE.md#protocol-features-used)).

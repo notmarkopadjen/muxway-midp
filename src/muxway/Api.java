@@ -186,15 +186,11 @@ final class Api {
             return "Not found.";
         case 413:
             return "Too long.";
-        case 415:
-            return "Not an image the host takes.";
         case 429:
             return "Too many tries. Wait and try again.";
         case 502:
         case 503:
             return "Host offline.";
-        case 507:
-            return "The host's inbox is full.";
         }
         return "Unexpected answer " + status + ".";
     }
@@ -214,5 +210,10 @@ final class Api {
 
     static String key(String name) {
         return "{\"key\":\"" + name + "\"}";
+    }
+
+    /** JSON body of the later call: park the pane, or wake it. */
+    static String later(boolean on) {
+        return "{\"later\":" + (on ? "true" : "false") + "}";
     }
 }
