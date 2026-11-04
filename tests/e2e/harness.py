@@ -103,12 +103,20 @@ class Core:
                 p.kill()
 
     def tmux_cmd(self, *args):
-        return subprocess.run(["tmux", "-L", self.tmux, *args], capture_output=True, text=True, timeout=10).stdout.strip()
+        # A pane split from here starts in this client's directory: the project under the root, when there is one.
+        return subprocess.run(["tmux", "-L", self.tmux, *args], capture_output=True, text=True, timeout=10,
+                              cwd=self.preview / "project" if self.preview else None).stdout.strip()
 
-    def start(self, expose="--write", inbox=False):
+    def start(self, expose="--write", inbox=False, preview=False):
+        """preview: the agent gets a preview root and the shell starts in a project folder under it."""
         self.inbox = self.dir / "inbox" if inbox else None
+        self.preview = self.dir / "roots" if preview else None
         shell = "env -i PATH=/usr/bin:/bin TERM=xterm LANG=C.UTF-8 PS1='$ ' bash --norc --noprofile"
-        self.tmux_cmd("-f", "/dev/null", "new-session", "-d", "-s", "work", "-n", "shell", "-x", "80", "-y", "24", shell)
+        where = []
+        if self.preview:
+            (self.preview / "project").mkdir(parents=True)
+            where = ["-c", str(self.preview / "project")]
+        self.tmux_cmd("-f", "/dev/null", "new-session", "-d", "-s", "work", "-n", "shell", "-x", "80", "-y", "24", *where, shell)
         self.tmux_cmd("select-pane", "-t", "work:0.0", "-T", "test-pane")
         self.spawn("hub", "hub", "serve", "--dir", str(self.dir / "hub"), "--listen", f"127.0.0.1:{self.port}",
                    "--public-url", self.url)
@@ -124,6 +132,8 @@ class Core:
         args = ["agent", "run", "--dir", str(self.dir / "agent"), "--tmux-name", self.tmux]
         if self.inbox:
             args += ["--inbox", str(self.inbox)]
+        if self.preview:
+            args += ["--preview", str(self.preview)]
         self.spawn("agent", *args)
         wait_for("agent online", lambda: f"{HOST}\tonline" in self.cli("hub", "agents", "--dir", str(self.dir / "hub")))
 
@@ -138,6 +148,10 @@ class Core:
     def revoke_all(self):
         for line in self.cli("hub", "token", "list", "--dir", str(self.dir / "hub")).splitlines()[1:]:
             self.cli("hub", "token", "revoke", "--dir", str(self.dir / "hub"), line.split()[0])
+
+    def alias(self, target, name):
+        """Names a pane on the host, as the owner does with muxway expose --name or from the web."""
+        self.cli("expose", "--tmux-name", self.tmux, "-t", target, "--write", "--name", name)
 
     def pane(self):
         return self.tmux_cmd("capture-pane", "-p", "-t", "work:0.0")
@@ -283,6 +297,19 @@ class Relay:
                     data = f"{HOST}/work/0.0\tquestion\t1\tpick one\t{'|'.join(choices)}\n".encode()
                 if relay.mode in ("talk", "lie-talk") and self.path.split("?")[0] == "/v1/panes":
                     data = relay.columns(data)
+                if relay.mode == "lie-names" and self.path.split("?")[0] == "/v1/panes":
+                    # An alias and a folder a hub would never send: 300 letters, control characters,
+                    # a path up, a stranger's address, a folder ending in a slash.
+                    forged = {f"{HOST}/work/0.0": ("a" * 300, "/x/\x1b[2J\x07y"),
+                              f"{HOST}/work/0.1": ("../../etc", "/tmp/../.."),
+                              f"{HOST}/work/0.2": ("bob/work/0.0", "/home/bob/")}
+                    rows = []
+                    for row in data.decode("latin-1").split("\n"):
+                        f = row.split("\t")
+                        if f[0] in forged:
+                            f = (f + [""] * 7)[:7] + list(forged[f[0]])
+                        rows.append("\t".join(f))
+                    data = "\n".join(rows).encode("latin-1")
                 if relay.mode == "lie-later" and self.path.split("?")[0] == "/v1/panes":
                     # The kind column says later on a pane the hub lists awake.
                     rows = []
