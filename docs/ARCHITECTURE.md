@@ -50,9 +50,10 @@ stateDiagram-v2
     Pane --> Panes: Back
     Panes --> Inbox: Inbox (MIDP 2.0)
     Pane --> Inbox: 9 (MIDP 2.0)
-    Inbox --> Pane: select
+    Inbox --> Pane: select (a parked pane wakes)
     Inbox --> Answer: select a row with choices
     Answer --> Inbox: a choice is sent
+    Pane --> Pane: Later / Wake (writable, MIDP 2.0)
     Panes --> Settings: Settings, or the token was refused
 ```
 
@@ -60,11 +61,15 @@ stateDiagram-v2
   `GET /v1/panes` in text mode, each by its title and program (`* build
   (claude)`, or `work/0.1 (bash)` when the title says nothing); `*` marks
   writable ones, the character after it what the pane waits for (`?` `!`
-  `z` `v`), offline hosts follow with `-`.
+  `z` `v`, `zz` for a pane parked for [later](features/later.md)),
+  offline hosts follow with `-`.
 - **Inbox** (MIDP 2.0 build) is a `List` of every waiting pane from
   `GET /v1/inbox` in text mode, oldest first; a row with choices opens
   **Answer**, a `List` of them, and the pick goes to
   `POST /v1/panes/{address}/answer`. See [the inbox](features/inbox.md).
+  Parked panes come last, and open woken (`POST
+  /v1/panes/{address}/later`), as *Later* and *Wake* on the pane's menu
+  park and wake it. See [later](features/later.md).
 - **Pane** is a `Canvas`, not a `Form`: a MIDP 1.0 form opens at its top
   and cannot be scrolled from code, while a terminal must open at its
   bottom. The canvas fills the whole screen with the rows in a monospace
@@ -126,7 +131,8 @@ What a relay has to pass, and all the app ever asks for:
   plus `/v1`; the MIDP 2.0 build also `GET` and `POST
   /v1/panes/{address}/files` for an [image](features/images.md), and
   `GET /v1/inbox` and `POST /v1/panes/{address}/answer` for
-  [the inbox](features/inbox.md). No other route: no `/v1/me`, no tree,
+  [the inbox](features/inbox.md), and `POST /v1/panes/{address}/later`
+  for [later](features/later.md). No other route: no `/v1/me`, no tree,
   no long-poll or events.
 - Text mode only: `Accept: text/plain`, and the answers are read as
   `text/plain`. Of the pane listing's columns the MIDP 2.0 build reads
