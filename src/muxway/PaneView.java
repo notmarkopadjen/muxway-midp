@@ -16,7 +16,7 @@ import javax.microedition.lcdui.Image;
  * repaint() takes the display's own lock, the one paint() runs under.
  */
 final class PaneView extends Canvas {
-    static final int ENTER = 1, REPLY = 2, KEYS = 3, REFRESH = 4, IMAGE = 5, INBOX = 6;
+    static final int ENTER = 1, REPLY = 2, KEYS = 3, REFRESH = 4, IMAGE = 5, INBOX = 6, PREVIOUS = 7, NEXT = 8, MESSAGES = 9;
 
     // The green call key on Nokia phones; it sends Enter.
     private static final int SEND_KEY = -10;
@@ -26,12 +26,16 @@ final class PaneView extends Canvas {
     private Font italic;
     private final Image[] frames;
     private final Muxway app;
+    // The canvas's colours; MIDP 2.0 build only, the 1.0 build is black on white.
+    Theme theme;
 
     String title = "";
     // What the list called the pane; the overlay shows it.
     String name = "";
     String address = "";
     boolean writable;
+    // What the pane waits for, as the list marked it: ? ! z v, zz, zz !, or a space.
+    String mark = " ";
     // The host takes files for this pane, as the probe found.
     boolean inbox;
     // Parked for later by its owner; the overlay says so.
@@ -213,48 +217,66 @@ final class PaneView extends Canvas {
         }
         int w = width, h = height, lh = font.getHeight(), n = rows();
         int y0 = h - n * lh;
-        g.setColor(0xffffff);
+        g.setColor(Ui.THEME ? theme.bg : 0xffffff);
         g.fillRect(0, 0, w, h);
-        g.setColor(0x000000);
+        g.setColor(Ui.THEME ? theme.ink : 0x000000);
         g.setFont(font);
         String[] v = visible();
         for (int i = 0; i < n; i++) {
             g.drawString(v[i], 0, y0 + i * lh, Graphics.TOP | Graphics.LEFT);
         }
         if (info) {
-            String lead = (writable ? "> " : "  ") + (Ui.LATER && later ? "zz " : "");
+            String lead = lead();
             String shown = name.length() > 0 ? name : title;
+            // The right end says read-only where the token cannot write; a header says so on every client.
+            String right = Ui.NAMES && !writable ? "read-only" : null;
             if (Ui.LATER && later) {
                 // The mark and the slant are the only signs of a parked pane.
-                bar(g, y0, lead, null);
-                g.setColor(0xffffff);
+                if (right != null && font.stringWidth(lead + " " + right) + italic.stringWidth(shown) > width) {
+                    right = null;
+                }
+                bar(g, y0, lead, right);
+                g.setColor(Ui.THEME ? theme.bg : 0xffffff);
                 g.setFont(italic);
                 g.drawString(shown, font.stringWidth(lead), y0, Graphics.TOP | Graphics.LEFT);
                 g.setFont(font);
-                g.setColor(0x000000);
+                g.setColor(Ui.THEME ? theme.ink : 0x000000);
             } else {
-                bar(g, y0, lead + shown, null);
+                bar(g, y0, lead + shown, right);
             }
             int last = body.length - offset;
             int first = Math.max(0, last - bodyRows());
             bar(g, y0 + (n - 1) * lh, (first + 1) + "-" + last + "/" + body.length,
-                "1 2/8" + (Files.ANY ? " 3" : "") + " 5" + (Ui.INBOX ? " 9" : "") + " 0 # *");
+                "1 2/8" + (Files.ANY ? " 3" : "") + " 5" + (Ui.MAIL ? " 7" : "") + (Ui.INBOX ? " 9" : "") + " 0 # *");
         }
-        if (frame >= 0 && frames != null && frames.length > 0) {
+        if (frame >= 0 && Ui.THEME) {
+            // A turning ring in the ink, as the other clients draw working.
+            g.setColor(theme.ink);
+            g.drawArc(w - 9, 1, 7, 7, (frame * 45) % 360, 270);
+        } else if (frame >= 0 && frames != null && frames.length > 0) {
             g.drawImage(frames[frame % frames.length], w, 0, Graphics.TOP | Graphics.RIGHT);
         }
     }
 
+    /** The overlay's top row before the name: the write mark, then what the pane waits for. */
+    private String lead() {
+        String lead = writable ? "> " : "  ";
+        if (Ui.NAMES && mark.trim().length() > 0) {
+            lead += mark + " ";
+        }
+        return lead;
+    }
+
     /** One inverted row of the overlay; the hint on the right only when both fit. */
     private void bar(Graphics g, int y, String left, String right) {
-        g.setColor(0x000000);
+        g.setColor(Ui.THEME ? theme.ink : 0x000000);
         g.fillRect(0, y, width, font.getHeight());
-        g.setColor(0xffffff);
+        g.setColor(Ui.THEME ? theme.bg : 0xffffff);
         g.drawString(left, 0, y, Graphics.TOP | Graphics.LEFT);
         if (right != null && font.stringWidth(left + " " + right) <= width) {
             g.drawString(right, width, y, Graphics.TOP | Graphics.RIGHT);
         }
-        g.setColor(0x000000);
+        g.setColor(Ui.THEME ? theme.ink : 0x000000);
     }
 
     protected void keyPressed(int key) {
@@ -290,7 +312,11 @@ final class PaneView extends Canvas {
             return;
         case KEY_POUND:
             info = !info;
-            Trace.show("Info " + (info ? "on" : "off") + (Ui.LATER && later ? " italic" : ""));
+            String said = "Info " + (info ? "on" : "off") + (Ui.LATER && later ? " italic" : "");
+            if (Ui.NAMES) {
+                said += ": " + lead() + (name.length() > 0 ? name : title) + (writable ? "" : " read-only");
+            }
+            Trace.show(said);
             repaint();
             return;
         case KEY_STAR:
@@ -302,11 +328,19 @@ final class PaneView extends Canvas {
             }
             return;
         }
+        if (Ui.MAIL && key == KEY_NUM7) {
+            app.shortcut(MESSAGES);
+            return;
+        }
         int action = getGameAction(key);
         if (action == UP) {
             scroll(1);
         } else if (action == DOWN) {
             scroll(-1);
+        } else if (action == LEFT) {
+            app.shortcut(PREVIOUS);
+        } else if (action == RIGHT) {
+            app.shortcut(NEXT);
         }
     }
 

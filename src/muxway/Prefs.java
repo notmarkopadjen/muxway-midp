@@ -16,6 +16,8 @@ final class Prefs {
     int text = Ui.TEXT;
     // A stamp of the install file's token last taken, so a new install file is taken once.
     String installed = "";
+    // The pane canvas's colours: 0 amber, 1 green, 2 paper; MIDP 2.0 build only.
+    int theme;
 
     private String[] paneAddress = new String[0];
     private int[] paneView = new int[0];
@@ -56,7 +58,7 @@ final class Prefs {
     void read(String record) {
         String[] f = Text.split(record, '\n');
         int version = Text.toInt(f[0], 0);
-        if (f.length < 5 || version < 1 || version > 3) {
+        if (f.length < 5 || version < 1 || version > 4) {
             return;
         }
         server = f[1];
@@ -68,9 +70,12 @@ final class Prefs {
         }
         text = f.length > 5 ? Math.max(0, Math.min(2, Text.toInt(f[5], Ui.TEXT))) : Ui.TEXT;
         installed = version >= 3 && f.length > 6 ? f[6] : "";
+        if (Ui.THEME) {
+            theme = version >= 4 && f.length > 7 ? Math.max(0, Math.min(2, Text.toInt(f[7], 0))) : 0;
+        }
         paneAddress = new String[0];
         paneView = new int[0];
-        for (int i = version >= 3 ? 7 : 6; i < f.length; i++) {
+        for (int i = version >= 4 ? 8 : version >= 3 ? 7 : 6; i < f.length; i++) {
             String[] p = Text.split(f[i], '\t');
             if (p.length == 2 && p[0].length() > 0) {
                 setView(p[0], Math.max(0, Text.toInt(p[1], 0)));
@@ -79,9 +84,13 @@ final class Prefs {
     }
 
     String record() {
-        StringBuffer s = new StringBuffer("3\n");
+        // The 2.0 build writes version 4 with the theme; the 1.0 build has none and keeps writing 3.
+        StringBuffer s = new StringBuffer(Ui.THEME ? "4\n" : "3\n");
         s.append(server).append('\n').append(token).append('\n').append(width).append('\n');
         s.append(refresh).append('\n').append(text).append('\n').append(installed);
+        if (Ui.THEME) {
+            s.append('\n').append(theme);
+        }
         for (int i = 0; i < paneAddress.length; i++) {
             s.append('\n').append(paneAddress[i]).append('\t').append(paneView[i]);
         }

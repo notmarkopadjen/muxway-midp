@@ -24,13 +24,16 @@ pane the list does not know is named by its address.
 
 After every waiting pane come the panes their owner parked for
 [later](later.md), as the hub orders them, with `zz` for their mark and
-the text and choices of whatever waits underneath, if anything:
-`zz build (claude)`. Selecting one opens the pane and wakes it, on a
+the text and choices of whatever waits underneath, if anything, and
+its mark after `zz` where the hub's row names it (the `pending` column):
+`zz ! build (claude): run it?`. Selecting one opens the pane and wakes it, on a
 writable pane (MIDP 2.0 build).
 
 Select a row and its pane opens, as from the pane list. A row whose
 question came with fixed choices (`muxway ask` on the host) opens the
-**Answer** list first: the choices, then *Open the pane*. Pick a choice
+**Answer** list first: the choices, then *Open the pane*. On a pane the
+list marks read-only the choices are not offered and the row opens the
+pane: an answer is a write, as every client's disabled buttons say. Pick a choice
 and it goes to the process that asked, `POST /v1/panes/{address}/answer`;
 nothing is typed into the pane. The inbox is read again after.
 
@@ -75,6 +78,9 @@ A relay forwards two more paths for this: `GET /v1/inbox` and `POST
   so a hostile relay cannot put endless text or a terminal sequence
   into a list.
 - The inbox shows exactly what the token may read, as the pane list does.
+- A read-only row offers no choices: the write mark is the list's, from
+  the hub's mode column, so a relay that lies about it gets the hub's
+  refusal in words (S16).
 - Between the phone and the relay an answer travels in the clear like
   every input; the warning Settings shows once for a plain-HTTP server
   covers it.

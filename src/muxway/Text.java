@@ -108,6 +108,8 @@ final class Text {
         String command = f.length > 2 ? f[2].trim() : "";
         String title = f.length > 3 ? f[3].trim() : "";
         // Claude Code's mark in front of its title is decoration; the list has a mark of its own.
+        // Only the spark itself says Claude: once folded to * it is any bullet (S09).
+        boolean spark = Ui.NAMES && title.startsWith("\u2733");
         if (title.startsWith("\u2733 ") || title.startsWith("* ")) {
             title = title.substring(2).trim();
         } else if (title.equals("\u2733") || title.equals("*")) {
@@ -116,9 +118,14 @@ final class Text {
         if (title.equals(command) || title.equals(host)) {
             title = "";
         }
+        // A harness is named as every client names it; its title is its status. MIDP 2.0 build only.
+        String harness = Ui.NAMES ? harness(command, spark) : "";
+        if (Ui.NAMES && harness.length() > 0 && title.toLowerCase().equals(harness.toLowerCase())) {
+            title = "";
+        }
         // The owner's alias is the name; the title is what the program says about itself.
         String alias = f.length > 7 ? f[7].trim() : "";
-        String name = alias.length() > 0 ? alias : title.length() == 0 ? rest : title;
+        String name = alias.length() > 0 ? alias : Ui.NAMES && harness.length() > 0 ? harness : title.length() == 0 ? rest : title;
         if (hosts) {
             name = host + "/" + name;
         }
@@ -128,8 +135,12 @@ final class Text {
             if (folder.length() > 0) {
                 name += " /" + folder;
             }
-            if (alias.length() > 0 && title.length() > 0) {
-                name += (dot ? " \u00b7 " : " - ") + title;
+            String sep = dot ? " \u00b7 " : " - ";
+            if (alias.length() > 0 && harness.length() > 0) {
+                name += sep + harness;
+            }
+            if ((alias.length() > 0 || harness.length() > 0) && title.length() > 0) {
+                name += sep + title;
             }
         }
         if (Ui.TALK && mail.length() > 0) {
@@ -137,10 +148,38 @@ final class Text {
             int room = 63 - mail.length();
             name = (name.length() > room ? name.substring(0, room) : name) + " " + mail;
         }
-        if (command.length() > 0) {
+        if (command.length() > 0 && !(Ui.NAMES && harness.length() > 0)) {
             name += " (" + command + ")";
         }
         return name.length() > 64 ? name.substring(0, 64) : name;
+    }
+
+    /**
+     * The name every client gives an AI coding harness, from the pane's
+     * command, or Claude Code's spark in front of its title; empty for any
+     * other program.
+     */
+    static String harness(String command, boolean spark) {
+        if (command.equals("claude") || spark) {
+            return "Claude";
+        } else if (command.equals("codex")) {
+            return "Codex";
+        } else if (command.equals("gemini")) {
+            return "Gemini";
+        } else if (command.equals("agy")) {
+            return "Antigravity";
+        } else if (command.equals("opencode")) {
+            return "OpenCode";
+        } else if (command.equals("copilot")) {
+            return "Copilot";
+        } else if (command.equals("aider") || command.equals("goose")) {
+            return command;
+        } else if (command.equals("amp")) {
+            return "Amp";
+        } else if (command.equals("cursor-agent")) {
+            return "Cursor";
+        }
+        return "";
     }
 
     /**
@@ -177,14 +216,26 @@ final class Text {
         return " ";
     }
 
+    /** The mark with what waits under a parked pane after it, from the pending column: zz !, zz ?; zz alone when nothing does. */
+    static String marks(String kind, String pending) {
+        String m = mark(kind);
+        if (m.equals("zz")) {
+            String u = mark(pending);
+            if (!u.equals(" ")) {
+                m += " " + u;
+            }
+        }
+        return m;
+    }
+
     /**
      * What the inbox shows for one row of the hub's text inbox (address,
-     * kind, at, text, choices): the kind's mark, the pane's name and the
-     * text. Cut at 64 characters.
+     * kind, at, text, choices, pending): the kind's mark, the pane's name and
+     * the text. Cut at 64 characters.
      */
     static String inboxLabel(String[] f, String name) {
         String text = f.length > 3 ? f[3].trim() : "";
-        String label = mark(f[1].trim()) + " " + name + (text.length() > 0 ? ": " + text : "");
+        String label = marks(f[1].trim(), f.length > 5 ? f[5].trim() : "") + " " + name + (text.length() > 0 ? ": " + text : "");
         return label.length() > 64 ? label.substring(0, 64) : label;
     }
 
@@ -291,6 +342,34 @@ final class Text {
             }
         }
         return true;
+    }
+
+    /** A session name a client may start: a-z, 0-9, - and _, one to 32 of them. */
+    static boolean session(String s) {
+        if (s.length() < 1 || s.length() > 32) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The time of day of a unix time, on the phone's clock; empty for anything but a number. */
+    static String hhmm(String at) {
+        long t;
+        try {
+            t = Long.parseLong(at.trim()) * 1000L;
+        } catch (NumberFormatException e) {
+            return "";
+        }
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTime(new java.util.Date(t));
+        int h = c.get(java.util.Calendar.HOUR_OF_DAY), m = c.get(java.util.Calendar.MINUTE);
+        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
     }
 
     static int toInt(String s, int fallback) {

@@ -6,15 +6,19 @@ plain HTTP from the phone and forwards it to the hub over HTTPS.
 
 ## What a relay must do
 
-- Forward `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}`,
-  `POST /v1/panes/{address}/input`, and for the MIDP 2.0 build `GET` and
-  `POST /v1/panes/{address}/files`, `GET /v1/inbox`, `POST
-  /v1/panes/{address}/answer` and `POST /v1/panes/{address}/later`, to
-  the hub, with their query string
-  and the headers `X-Muxway-Token`, `Accept`, `Content-Type` and the
-  body. These are the only paths the app requests (see
-  [the protocol features used](../ARCHITECTURE.md#protocol-features-used)).
-  Nothing else: a relay that forwards any path is an open proxy.
+- Forward `GET /v1/hosts`, `GET /v1/panes`, `GET /v1/panes/{address}`
+  and `POST /v1/panes/{address}/input`, and for the MIDP 2.0 build `GET`
+  and `POST /v1/panes/{address}/files`, `GET /v1/inbox`, `POST
+  /v1/panes/{address}/answer`, `POST /v1/panes/{address}/later`, `GET
+  /v1/talk`, `GET` and `POST /v1/panes/{address}/mail`, `POST
+  /v1/panes/{address}/close`, `POST /v1/hosts/{host}/sessions` and
+  `POST /v1/windows/{host}/{session}/{window}/panes`, to the hub, with
+  their query string and the headers `X-Muxway-Token`, `Accept`,
+  `Content-Type` and the body. These are the only paths the app
+  requests (see [the protocol features
+  used](../ARCHITECTURE.md#protocol-features-used)), and the example
+  below names each of them and nothing wider. Nothing else: a relay
+  that forwards any path is an open proxy.
 - Answer only phones you know. The simplest way: a list of the tokens the
   relay will forward; anything else gets `401` from the relay itself.
 - Cap request bodies (16 KiB is the hub's own limit) and answers. The
@@ -57,11 +61,14 @@ Settings.
 
 A relay can be a few lines of configuration in a proxy that terminates
 nothing and forwards to the hub over HTTPS. For Caddy, with the two WAP
-rules left to the phone side when no WAP gateway is involved:
+rules left to the phone side when no WAP gateway is involved, and the
+paths above and no other, as one expression (the suite's S19 checks the
+app against the same list; a relay for the MIDP 1.0 build alone needs
+`hosts`, `panes`, a pane and `input`):
 
 ```caddyfile
 :8080 {
-	@client path /v1/hosts /v1/panes /v1/panes/* /v1/inbox
+	@client path_regexp ^/v1/(hosts|panes|inbox|talk)$|^/v1/panes/[^/]+/[^/]+/[^/]+(/(input|answer|files|later|mail|close))?$|^/v1/hosts/[^/]+/sessions$|^/v1/windows/[^/]+/[^/]+/[^/]+/panes$
 	request_body @client {
 		max_size 8MB
 	}

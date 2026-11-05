@@ -18,13 +18,17 @@ character goes, on both builds:
 
 | Where | Parked |
 |---|---|
-| pane list | `*zz build (claude)`: the hub's order kept, a space after the two-letter mark |
+| pane list | `*zz build (claude)`: the hub's order kept, a space after the two-letter mark; `*zz ! build` with what waits underneath (MIDP 2.0) |
 | inbox | `zz build (claude): deploy?`: after every awake pane, as the hub orders it; the text and the choices are the attention's underneath, if any |
 | pane view | plain; the `#` overlay's top row reads `> zz build (claude)`, the name in italics on the MIDP 2.0 build |
 
-What waits underneath a parked pane (a question, a permission) is not
-carried in text mode; the inbox row still shows its text and offers its
-choices, and answering it wakes the pane on the host as any input does.
+What waits underneath a parked pane (a question, a permission) comes
+in a column of its own, `pending`, of the listing and the inbox in text
+mode (the core's text-mode parity issue): the 2.0 build puts
+its mark after `zz`, `*zz ! build` in the list, `zz ! build: run it?` in
+the inbox, `> zz ! build` in the overlay; the small build shows `zz`
+alone. The inbox row shows its text and offers its choices, and
+answering it wakes the pane on the host as any input does.
 
 ## The slant (MIDP 2.0 build)
 

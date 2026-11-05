@@ -15,7 +15,8 @@ and never from the title; the character after it says what the pane
 waits for, from the hub's `kind` column: `?` a question, `!` a
 permission, `z` idle, `v` done, a space for nothing (`*?build (claude)`),
 and `zz` with a space after it for a pane its owner parked for
-[later](later.md) (`*zz build (claude)`);
+[later](later.md) (`*zz build (claude)`; on the 2.0 build what waits
+underneath follows, from the listing's `pending` column, `*zz ! build`);
 a mark leading the title (`✳`, or `*` once folded) is dropped, it is
 decoration. A title that says nothing, because it is empty,
 the program's name, or the host's name (tmux's default until a program
@@ -25,6 +26,28 @@ hosts each entry starts with its host. Entries are cut at 64 characters;
 the phone scrolls long ones. On the MIDP 1.0 build the list is asked for
 in Latin-1 like the content (see [lenses](lenses.md)), so `✳` arrives as
 `*`.
+
+On the MIDP 2.0 build a **line per host** heads its rows, `= alice-laptop
+online`, with the host's state from the hosts call and the rows the
+listing holds: `online` for a host with panes, `nothing exposed` for an
+online host without, `offline`; the `host/` prefix and the trailing
+offline rows of the small build go, and the cursor starts on the first
+pane, not the line; `+ session` and `+ pane` on the list's menu act on
+the row under the cursor (see [new panes](new-panes.md)). **Auto** on the list's
+menu re-reads it every interval of the Settings value (10 s without
+one) while the list is the screen shown, quietly, the cursor kept on
+its row; *Back* from a pane leaves it on, Settings turns it off.
+
+An AI coding **harness** is named as every client names it, on the 2.0
+build: a pane whose command is `claude`, or whose title leads with
+Claude's spark, is `Claude`, and what it writes into its title (the
+codename) follows as the status: `* Claude /muxway · fixing the build`.
+Codex, Gemini, Antigravity (`agy`), OpenCode, Copilot, aider, goose, Amp
+and Cursor (`cursor-agent`) the same, by their command. With an alias
+the alias leads and the harness is the status's first word, `* review
+/muxway · Claude · fixing the build`; the program in brackets is left
+off, the name says it. A harness that names itself and nothing more
+reads `* Claude`. Any other program is listed as before.
 
 On the MIDP 2.0 build two things follow the name, from the listing's
 last columns, where the row has the room the smallest screen has not:
@@ -56,24 +79,33 @@ that is not one to three digits, and the column of a hub that does not
 write them yet, change nothing.
 
 ```
-[*?build ✉ 2 (claude)
+= alice-laptop online
+[* Claude /muxway · build ✉ 2
 ]* review (claude)
  * work/0.1 (bash)
+= bob-desktop offline
 ```
+
+A group's rows are kept together within their host: a group across two
+hosts is framed under each, a row whose partners are all on another
+host wearing `[` alone.
 
 ```mermaid
 flowchart LR
-    R["address TAB mode TAB command TAB title TAB kind TAB mail TAB talk TAB alias TAB cwd"] --> L{alias?}
+    R["address TAB mode TAB command TAB title TAB kind TAB mail TAB talk TAB alias TAB cwd TAB pending"] --> L{alias?}
     L -- yes --> N1["alias"]
-    L -- no --> T{title empty,<br/>= command<br/>or = host?}
+    L -- no --> A{a harness?<br/>(MIDP 2.0)}
+    A -- yes --> N4["Claude, Codex, ..."]
+    A -- no --> T{title empty,<br/>= command<br/>or = host?}
     T -- no --> N2["title"]
     T -- yes --> N3["session/window.pane"]
     N1 --> F["+ /folder (MIDP 2.0, cwd given)"]
+    N4 --> F
     N2 --> F
     N3 --> F
-    F --> S["+ · title (MIDP 2.0, a named pane whose title says something)"]
-    S --> C["+ (command)"]
-    C --> M["mark from mode: '*' or ' ', then from kind: '? ! z v', 'zz ' for later, or ' '"]
+    F --> S["+ · harness (an alias on a harness) + · title (MIDP 2.0, where the title says something)"]
+    S --> C["+ (command), unless a harness"]
+    C --> M["mark from mode: '*' or ' ', then from kind: '? ! z v', 'zz ' for later (+ what waits under it, MIDP 2.0), or ' '"]
 ```
 
 ### The states
@@ -93,7 +125,7 @@ state:
 | waiting | the kind's character after the write mark, `?` `!` `z` `v`; the [inbox](inbox.md) says what for | drawn as it is; `9` opens the inbox |
 | working | plain: no glyph, no word. The hub's `working` event clears the pane's attention and the listing's `kind` column is empty, and the screen moves | plain |
 | quiet | plain | plain |
-| [later](later.md) | `zz` where the kind's character goes, the hub's order kept | plain; the overlay reads `> zz name`, the name in italics (MIDP 2.0); *Later* and *Wake* on the menu (MIDP 2.0) |
+| [later](later.md) | `zz` where the kind's character goes, the hub's order kept; what waits underneath after it on the 2.0 build (`zz !`) | plain; the overlay reads `> zz name`, the name in italics (MIDP 2.0); *Later* and *Wake* on the menu (MIDP 2.0) |
 
 A working row therefore looks like a quiet one; the pane's own screen
 tells them apart. A mark for working would need the listing to carry
@@ -130,15 +162,43 @@ characters.
 | `2` / `8`, or the joystick | scroll one row up / down; hold to repeat |
 | `3` | Image (writable panes, MIDP 2.0 build): see [images](images.md) |
 | `5` | Reply (writable panes) |
+| `7` | Messages (MIDP 2.0 build): see [messages](messages.md) |
 | `9` | Inbox (MIDP 2.0 build): see [the inbox](inbox.md) |
 | `0` | Keys (writable panes) |
 | `#` | show or hide the title and scroll position |
 | `*` | show or hide what a [lens](lenses.md) hid (footer, status) |
+| joystick left / right | the previous / the next pane of the list, round at either end; a parked pane opens and wakes as from the list |
 | green call key | send Enter (writable panes) |
 
 The same list is printed at the bottom of Settings. The left soft key menu
-still offers Reply, Keys, Image (MIDP 2.0), Refresh, Auto, Pane, Later or
-Wake (writable panes, MIDP 2.0, see [later](later.md)), Back and Settings.
+still offers Reply, Keys, Image (MIDP 2.0), Refresh, Auto, Mail (MIDP
+2.0, see [messages](messages.md)), Pane, Later or Wake (writable panes,
+MIDP 2.0, see [later](later.md)), Commands (below), Back, Settings, and
+on the 2.0 build Close (a writable pane on a host that closes, see [new
+panes](new-panes.md)).
+
+## Commands
+
+**Commands** on a writable pane's menu (MIDP 2.0 build) lists the
+command row of the other clients for the program in the pane: Claude
+Code's slash commands (`/clear`, `/exit`, `/compact`, `/rename`,
+`/model`, `/resume` and the rest, when the hub names the program
+`claude` or the pane's view is set to the Claude Code lens) or a
+shell's starters (`exit`, `htop`, `claude`, `codex`, `git status`,
+`make test`, `ls -la`, ...). A pick is sent with Enter, as Reply's
+*Send* sends; `/rename` opens Reply with it typed and waits for the
+name. Any other program has no entry on the menu. The phone keeps no
+lines sent before.
+
+## Theme
+
+Settings has **Theme** on the MIDP 2.0 build: **Amber** (the default),
+**Green** or **Paper**, the guideline's tokens for the pane's canvas:
+amber ink on a near-black ground, phosphor green on black, dark ink on
+paper. The overlay's bars are inverted in the same two colours, and
+the wait mark is a ring turning in the ink. The phone's own lists and
+forms keep the phone's look. The MIDP 1.0 build is black on white: its
+screen is monochrome.
 
 ## Pane
 
@@ -160,16 +220,23 @@ stateDiagram-v2
     Pane --> Reply: 5 (writable)
     Pane --> Keys: 0 (writable)
     Pane --> Image: 3 (writable, MIDP 2.0)
+    Pane --> Pane: left / right, the previous / next pane
+    Pane --> Messages: 7 (MIDP 2.0)
+    Pane --> Commands: menu (writable, MIDP 2.0)
 ```
 
 ## Overlay
 
 `#` draws two inverted rows over the pane: the top one with `>` for a
-writable pane, `zz` for a pane parked for [later](later.md), and the
-pane's name as the list showed it (in the phone's italic face while the
-pane is parked, on the MIDP 2.0 build), the bottom one with the rows on screen
-out of the rows the app holds (`7-12/40`) and, when it fits next to that,
-the key hints. `#` again removes them. While a request is out a small wait
+writable pane, then on the MIDP 2.0 build what the pane waits for as the
+list marked it (`?` `!` `z` `v`, `zz` for a pane parked for
+[later](later.md), `zz !` with what waits under it), and the pane's
+name as the list showed it (in the phone's italic face while the pane is
+parked, on the MIDP 2.0 build), with `read-only` at the row's right end
+on a pane the token cannot write when it fits (MIDP 2.0); the bottom one
+with the rows on screen out of the rows the app holds (`7-12/40`) and,
+when it fits next to that, the key hints. The mark is the list's: it
+changes with the next listing, and *Later* and *Wake* move it. `#` again removes them. While a request is out a small wait
 bar runs in the top right corner, overlay or not.
 
 ## Wrapping
@@ -210,7 +277,8 @@ flowchart TD
 The view changes how rows are drawn and adds keypad routes to screens that
 exist already. `5`, `0` and `3` do nothing on a pane the token cannot
 write; the hub refuses a write anyway if a relay lied about that. No key sends
-anything but Enter. Wrapping allocates one string per wrapped row, at most
+anything but Enter; left and right open panes the list holds and nothing
+else. A Commands pick is the JAR's own string, sent as a reply is. Wrapping allocates one string per wrapped row, at most
 32 KiB / 8 columns of them (by pixels, one character per row at the
 worst), within the smallest target's heap. The pane records in the
 settings store hold only addresses the hub listed, at most 32, and a line
@@ -228,7 +296,10 @@ to look like another pane (`work/0.0 (claude)` on a shell, `bob/work/0.0`
 as a name) misleads the eye only: the program in brackets is the hub's,
 the pane a row opens is its first column's, and the hub decides what
 the token may write on every input. The owner exposed that pane; a
-program there already holds a shell. The folder is a path on the host:
+program there already holds a shell. The harness name comes from the
+command the hub gives, or the spark Claude Code puts first in its title:
+a program that puts the spark there is listed as Claude, and nothing more
+follows from it. The folder is a path on the host:
 the hub gives it to a writer of the pane under a preview root the owner
 named and to nobody else, the phone shows its last segment as text and
 never asks for the directory. The end-to-end suite has these cases

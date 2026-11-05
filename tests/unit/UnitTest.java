@@ -152,13 +152,13 @@ public final class UnitTest {
     private static void prefsTests() {
         Prefs p = new Prefs();
         p.read("1\nhttp://relay.example.com\nabc\n0\n5\n1");
-        eq("prefs_old_record_reads_with_defaults", p.record(), "3\nhttp://relay.example.com\nabc\n0\n5\n" + Ui.TEXT + "\n");
+        eq("prefs_old_record_reads_with_defaults", p.record(), "4\nhttp://relay.example.com\nabc\n0\n5\n" + Ui.TEXT + "\n\n0");
         eq("prefs_unknown_pane_is_auto", String.valueOf(p.view("h/work/0.0")), "0");
         p.setView("h/work/0.0", 1);
         p.setView("h/work/1.0", 2);
         p.setView("h/work/0.0", 2);
         p.text = 2;
-        eq("prefs_panes_in_record", p.record(), "3\nhttp://relay.example.com\nabc\n0\n5\n2\n\nh/work/0.0\t2\nh/work/1.0\t2");
+        eq("prefs_panes_in_record", p.record(), "4\nhttp://relay.example.com\nabc\n0\n5\n2\n\n0\nh/work/0.0\t2\nh/work/1.0\t2");
         Prefs q = new Prefs();
         q.read(p.record() + "\nbroken line\n\tno address\nh/work/2.0\tx");
         eq("prefs_record_round_trip", String.valueOf(q.view("h/work/1.0")) + q.view("h/work/0.0") + q.text, "222");
@@ -167,8 +167,8 @@ public final class UnitTest {
             q.setView("h/s/" + i + ".0", 1);
         }
         eq("prefs_cap_drops_oldest", String.valueOf(q.view("h/work/0.0")) + q.view("h/s/7.0") + q.view("h/s/8.0") + q.view("h/s/39.0"), "0011");
-        eq("prefs_cap_size", String.valueOf(Text.split(q.record(), '\n').length), String.valueOf(7 + Prefs.PANES));
-        q.read("4\nx\ny\n0\n0");
+        eq("prefs_cap_size", String.valueOf(Text.split(q.record(), '\n').length), String.valueOf(8 + Prefs.PANES));
+        q.read("5\nx\ny\n0\n0");
         eq("prefs_unknown_version_ignored", q.server, "http://relay.example.com");
         q.read("2\nhttp://relay.example.com\nabc\n0\n5\n1\nh/work/0.0\t1");
         eq("prefs_v2_record_has_no_stamp", q.installed + q.view("h/work/0.0"), "1");
@@ -177,6 +177,15 @@ public final class UnitTest {
         Prefs r = new Prefs();
         r.read(q.record());
         eq("prefs_v3_record_round_trip", r.installed + r.view("h/work/0.0") + r.view("h/work/3.0"), "1234512");
+        r.read("3\nhttp://relay.example.com\nabc\n0\n5\n1\n999\nh/work/0.0\t1");
+        eq("prefs_v3_record_has_no_theme", r.installed + r.theme + r.view("h/work/0.0"), "99901");
+        r.theme = 2;
+        r.setView("h/work/4.0", 1);
+        Prefs t = new Prefs();
+        t.read(r.record());
+        eq("prefs_v4_record_round_trip", t.theme + "" + t.view("h/work/4.0") + t.view("h/work/0.0"), "211");
+        t.read("4\nhttp://relay.example.com\nabc\n0\n5\n1\n\n7\nh/work/0.0\t1");
+        eq("prefs_theme_clamped", String.valueOf(t.theme), "2");
     }
 
     private static String label(String row, boolean hosts) {
@@ -184,13 +193,14 @@ public final class UnitTest {
     }
 
     private static void labelTests() {
-        eq("label_title_and_command", label("alice/work/0.0\twrite\tclaude\tmuxway android\t", false), "muxway android (claude)");
-        eq("label_drops_claudes_mark", label("alice/work/0.0\twrite\tclaude\t\u2733 build\t", false) + "|" + label("alice/work/0.0\twrite\tclaude\t* build\t", false), "build (claude)|build (claude)");
-        eq("label_mark_alone_is_address", label("alice/work/0.0\twrite\tclaude\t\u2733 \t", false), "work/0.0 (claude)");
+        eq("label_title_and_command", label("alice/work/0.0\twrite\tvim\tnotes.md\t", false), "notes.md (vim)");
+        eq("label_drops_claudes_mark", label("alice/work/0.0\twrite\tclaude\t\u2733 build\t", false) + "|" + label("alice/work/0.0\twrite\tclaude\t* build\t", false),
+            Ui.NAMES ? "Claude \u00b7 build|Claude \u00b7 build" : "build (claude)|build (claude)");
+        eq("label_mark_alone_is_address", label("alice/work/0.0\twrite\tclaude\t\u2733 \t", false), Ui.NAMES ? "Claude" : "work/0.0 (claude)");
         eq("label_empty_title_is_address", label("alice/work/0.1\twrite\tbash\t\t", false), "work/0.1 (bash)");
         eq("label_title_like_command_is_address", label("alice/work/0.1\tread\tbash\tbash\t", false), "work/0.1 (bash)");
         eq("label_title_like_host_is_address", label("alice/work/0.1\tread\tbash\talice\t", false), "work/0.1 (bash)");
-        eq("label_several_hosts_name_the_host", label("alice/work/0.0\twrite\tclaude\tbuild\t", true), "alice/build (claude)");
+        eq("label_several_hosts_name_the_host", label("alice/work/0.0\twrite\tbash\tbuild\t", true), "alice/build (bash)");
         eq("label_missing_columns", label("alice/work/0.0\twrite\tbash", false), "work/0.1 (bash)".replace("0.1", "0.0"));
         String big = "alice/work/0.0\tread\tbash\t";
         for (int i = 0; i < 300; i++) {
@@ -198,7 +208,7 @@ public final class UnitTest {
         }
         eq("label_cut_at_64", String.valueOf(label(big, false).length()), "64");
         eq("label_tab_in_title_takes_the_first_part", label("alice/work/0.0\tread\tbash\tsafe\twrite\tmore", false), "safe (bash)");
-        eq("label_mail_before_the_program", Text.label(Text.split("alice/work/0.0\twrite\tclaude\tbuild\t\t2\t", '\t'), false, Text.mail("2", true)), "build \u2709 2 (claude)");
+        eq("label_mail_before_the_program", Text.label(Text.split("alice/work/0.0\twrite\tvim\tbuild\t\t2\t", '\t'), false, Text.mail("2", true)), "build \u2709 2 (vim)");
         eq("label_mail_survives_the_cut", Text.label(Text.split(big + "\t\t7\t", '\t'), false, Text.mail("7", false)).substring(0, 64), repeat('x', 60) + " M 7");
         eq("mail_unicode_and_latin1", Text.mail(" 12 ", true) + "|" + Text.mail("3", false), "\u2709 12|M 3");
         eq("mail_none", Text.mail("", true) + Text.mail("0", true) + Text.mail("   ", false), "");
@@ -225,20 +235,35 @@ public final class UnitTest {
         eq("mark_later_is_zz", Text.mark("later") + "|" + Text.mark("Later") + "|" + Text.mark("later "), "zz| | ");
         eq("inbox_label_parked", Text.inboxLabel(Text.split("alice/work/0.0\tlater\t1\t\t", '\t'), "build (claude)"), "zz build (claude)");
         eq("inbox_label_parked_keeps_the_question", Text.inboxLabel(Text.split("alice/work/0.0\tlater\t1\tdeploy?\tyes|no", '\t'), "build"), "zz build: deploy?");
+        // What waits under a parked pane, from the pending column; nothing for an awake pane or a word that is no kind.
+        eq("marks_pending_after_zz", Text.marks("later", "permission") + "|" + Text.marks("later", "question") + "|" + Text.marks("later", "")
+            + "|" + Text.marks("question", "permission") + "|" + Text.marks("later", "x"), "zz !|zz ?|zz|?|zz");
+        eq("inbox_label_pending", Text.inboxLabel(Text.split("alice/work/0.0\tlater\t1\trun it?\t\tpermission", '\t'), "build"), "zz ! build: run it?");
+        eq("session_name_grammar", String.valueOf(Text.session("scratch")) + Text.session("a-b_c9") + Text.session(repeat('a', 32)) + "|"
+            + Text.session("") + Text.session(repeat('a', 33)) + Text.session("../x") + Text.session("Scratch") + Text.session("a b"), "truetruetrue|falsefalsefalsefalsefalse");
+        eq("hhmm_is_a_time_or_nothing", String.valueOf(Text.hhmm("1767225600").length()) + Text.hhmm("x") + Text.hhmm(""), "5");
         // The alias is the name on both builds; the folder and the status follow on the 2.0 build only.
         String named = "alice/work/0.0\twrite\tclaude\t\u2733 fixing the build\t\t\t\treview\t/home/alice/src/project";
-        eq("label_alias_is_the_name", label(named, false), Ui.NAMES ? "review /project \u00b7 fixing the build (claude)" : "review (claude)");
-        eq("label_alias_with_the_host", label(named, true), Ui.NAMES ? "alice/review /project \u00b7 fixing the build (claude)" : "alice/review (claude)");
+        eq("label_alias_is_the_name", label(named, false), Ui.NAMES ? "review /project \u00b7 Claude \u00b7 fixing the build" : "review (claude)");
+        eq("label_alias_with_the_host", label(named, true), Ui.NAMES ? "alice/review /project \u00b7 Claude \u00b7 fixing the build" : "alice/review (claude)");
         eq("label_alias_over_an_empty_title", label("alice/work/0.0\twrite\tbash\t\t\t\t\treview\t", false), "review (bash)");
-        eq("label_empty_alias_changes_nothing", label("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\t \t", false), "build (claude)");
+        eq("label_empty_alias_changes_nothing", label("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\t \t", false), Ui.NAMES ? "Claude \u00b7 build" : "build (claude)");
         eq("label_alias_cut_at_64", String.valueOf(label("alice/work/0.0\twrite\tbash\tt\t\t\t\t" + repeat('a', 300) + "\t", false).length()), "64");
         if (Ui.NAMES) {
-            eq("label_folder_without_an_alias", label("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\t\t/home/alice/src/project", false), "build /project (claude)");
+            eq("label_folder_without_an_alias", label("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\t\t/home/alice/src/project", false), "Claude /project \u00b7 build");
             eq("label_folder_from_the_address", label("alice/work/0.1\twrite\tbash\t\t\t\t\t\t/home/alice", false), "work/0.1 /alice (bash)");
             eq("label_folder_trailing_slash_is_none", label("alice/work/0.0\twrite\tbash\tbuild\t\t\t\t\t/home/alice/", false) + "|" + label("alice/work/0.0\twrite\tbash\tbuild\t\t\t\t\t/", false), "build (bash)|build (bash)");
             eq("label_no_status_for_a_title_like_the_program", label("alice/work/0.0\twrite\tbash\tbash\t\t\t\treview\t", false), "review (bash)");
-            eq("label_status_dash_without_a_dot", Text.label(Text.split("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\treview\t", '\t'), false, "", false), "review - build (claude)");
-            eq("label_mail_after_the_folder_and_status", Text.label(Text.split(named + "\t", '\t'), false, Text.mail("2", true)), "review /project \u00b7 fixing the build \u2709 2 (claude)");
+            eq("label_status_dash_without_a_dot", Text.label(Text.split("alice/work/0.0\twrite\tclaude\tbuild\t\t\t\treview\t", '\t'), false, "", false), "review - Claude - build");
+            eq("label_mail_after_the_folder_and_status", Text.label(Text.split(named + "\t", '\t'), false, Text.mail("2", true)), "review /project \u00b7 Claude \u00b7 fixing the build \u2709 2");
+            // The harnesses, named as every client names them; a shell as before.
+            eq("harness_by_command_and_spark", Text.harness("claude", false) + Text.harness("bash", true) + Text.harness("codex", false) + Text.harness("agy", false)
+                + Text.harness("cursor-agent", false) + Text.harness("goose", false) + "|" + Text.harness("bash", false) + Text.harness("", false), "ClaudeClaudeCodexAntigravityCursorgoose|");
+            eq("label_claude_by_the_spark", label("alice/work/0.0\twrite\tnode\t\u2733 build\t", false), "Claude \u00b7 build");
+            eq("label_claude_without_a_codename", label("alice/work/0.0\twrite\tclaude\t\u2733 \t", false) + "|" + label("alice/work/0.0\twrite\tclaude\tclaude\t", false)
+                + "|" + label("alice/work/0.0\twrite\tclaude\tClaude\t", false), "Claude|Claude|Claude");
+            eq("label_codex_title_is_the_status", label("alice/work/0.0\twrite\tcodex\tmuxway\t", false), "Codex \u00b7 muxway");
+            eq("label_shell_as_before", label("alice/work/0.1\twrite\tbash\tbuild\t", false), "build (bash)");
         }
     }
 

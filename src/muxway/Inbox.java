@@ -23,7 +23,7 @@ final class Inbox implements CommandListener {
     private final Command refresh = new Command("Refresh", Command.SCREEN, 1);
 
     private final Vector addresses = new Vector();
-    // String[] of a row's choices, or null.
+    // String[] of a row's choices, or null; none on a pane the token cannot write, an answer is a write.
     private final Vector choices = new Vector();
     // The screen Back returns to: the pane list or a pane.
     Displayable from;
@@ -41,8 +41,8 @@ final class Inbox implements CommandListener {
         answers.setCommandListener(this);
     }
 
-    /** Fills the list from the hub's rows; names come from the pane list where the address is known. */
-    void fill(String body, Vector known, Vector names) {
+    /** Fills the list from the hub's rows; names and the write mark come from the pane list where the address is known. */
+    void fill(String body, Vector known, Vector names, Vector writable) {
         String[] rows = Text.split(body, '\n');
         for (int i = list.size() - 1; i >= 0; i--) {
             list.delete(i);
@@ -57,10 +57,11 @@ final class Inbox implements CommandListener {
             }
             int k = known.indexOf(f[0]);
             String name = k >= 0 ? (String) names.elementAt(k) : f[0].substring(f[0].indexOf('/') + 1);
+            boolean w = k >= 0 && ((Boolean) writable.elementAt(k)).booleanValue();
             String label = Text.inboxLabel(f, name);
             list.append(label, null);
             addresses.addElement(f[0]);
-            choices.addElement(f.length > 4 ? Text.choices(f[4]) : null);
+            choices.addElement(w && f.length > 4 ? Text.choices(f[4]) : null);
             shown.append(label).append('\n');
         }
         if (list.size() == 0) {
