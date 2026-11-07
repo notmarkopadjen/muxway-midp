@@ -98,7 +98,10 @@ def open_pane(phone):
 
 def dismiss(phone):
     phone.click("right")
-    time.sleep(0.5)
+    # A menu opened right after the alert has picked the wrong entry, or
+    # none, on a loaded machine (CI beside another job): the screen behind
+    # the alert needs a moment to be current again.
+    time.sleep(1.5)
 
 
 # --- security ---------------------------------------------------------------------

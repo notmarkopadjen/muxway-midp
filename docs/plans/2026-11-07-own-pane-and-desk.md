@@ -369,7 +369,10 @@ Deviations:
   2026-11-04), S30 pauses a second after the give-up's alert, and F49
   opens each desk from a phone started on the list, as the owner picks
   a desk up, with no *Back* in between. Nothing in the product changed
-  for it.
+  for it. The PR's CI run then lost S31's fourth pick the same way, the
+  menu opened right after an alert was dismissed: `dismiss` now waits
+  1.5 s instead of 0.5 for the screen behind the alert, for every test
+  (S31 passed three times in a row here after it).
 
 ## Test run
 
