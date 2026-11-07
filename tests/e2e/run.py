@@ -1840,22 +1840,22 @@ def f49(run, name, profile):
     phone.expect(r"^Alert: The desk is empty", "said so")
     phone.shot("empty")
     dismiss(phone)
+    # Each desk another client wrote is opened by a phone started on the list, as the owner picks it up.
     for desk, want in (({"view": "panes", "panes": [f"{HOST}/work/0.0", f"{HOST}/work/0.1"], "focused": f"{HOST}/work/0.1",
                          "arrangement": "row"}, "0.1"),
                        ({"view": "panes", "panes": [f"{HOST}/work/0.1", f"{HOST}/work/0.0"]}, "0.1"),
                        ({"view": "window", "window": f"{HOST}/work/0"}, "0.0")):
         status, body = core.desk(tok, desk)
         check(status == 200, f"the desk refused: {status} {body[:80]}")
-        n = len(phone.trace())
+        phone.close()
+        phone = Phone(run, name, profile, {"Muxway-Server": relay.url, "Muxway-Token": tok})
+        run.cleanups.append(phone.close)
+        phone.expect(r"^Panes: .*test-pane-2", "the list")
         phone.pick_list("Desk")
-        phone.expect(r"^View " + HOST + r"/work/" + want.replace(".", r"\.") + " writable", f"the desk's pane {want} opened", after=n)
-        phone.expect(r"^work/" + want.replace(".", r"\.") + ": ", "its rows", after=n)
+        phone.expect(r"^View " + HOST + r"/work/" + want.replace(".", r"\.") + " writable", f"the desk's pane {want} opened")
+        phone.expect(r"^work/" + want.replace(".", r"\.") + ": ", "its rows")
         if desk["view"] == "panes" and "focused" in desk:
             phone.shot("focused")
-        time.sleep(1)  # the read's ring stops; a menu opened under it has picked the wrong entry
-        n = len(phone.trace())
-        phone.pick("Back")
-        phone.expect(r"^Panes: ", "the list", after=n)
     check(not no_writes(relay), f"the phone wrote something: {no_writes(relay)}")
 
 
