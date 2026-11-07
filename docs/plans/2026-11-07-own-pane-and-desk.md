@@ -49,9 +49,10 @@ Out of scope, and why:
   (`address mode command title kind mail talk alias cwd pending`), and a
   text-mode pane read carries no identity either, so the phone cannot
   tell a pane renumbered under the address it holds from the pane it
-  opened. That is a gap in the core's text mode, reported there as an
-  issue with this plan (a trailing `pane_id` column on the listing, as
-  `alias` and `cwd` were added); when the column lands the phone can
+  opened. That is a gap in the core's text mode, reported with this
+  plan for the core to take up (a trailing `pane_id` column on the
+  listing after `pending`, as `alias`, `cwd` and `pending` were added,
+  and the same on the inbox's rows); when the column lands the phone can
   learn its pane's id at open and follow it from a re-read list. Until
   then the phone has the rule it can keep: it draws its own view's
   answer or nothing, and a `404` closes it with a word;
@@ -225,8 +226,8 @@ under the phone's 32 KiB cap). The relay's list of forwarded paths
 gains it (`relay.md`, the Caddy example's regexp). The pinned protocol
 version stays.
 
-The core gap (the `pane_id` column in text mode) is an issue in the
-core, not a change here.
+The core gap (the `pane_id` column in text mode) is the core's to
+change, not a change here.
 
 ## 4. Security analysis
 
@@ -303,7 +304,7 @@ grep and gitleaks run before the push.
 - README: a bullet each.
 - Proposed to the core with the pull request: the guideline's MIDP
   cells for *tiles* (§1.4) and *desk* (§1.1), and the text-mode
-  `pane_id` column as an issue.
+  `pane_id` column.
 
 ## 8. Implementation steps
 

@@ -221,6 +221,16 @@ class Core:
         c.close()
         return r.status, data
 
+    def desk(self, tok, desk):
+        """Writes the desk as the web or Android does: PUT /v1/desk under the token."""
+        c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
+        c.request("PUT", "/v1/desk", body=json.dumps(desk),
+                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data
+
     def get(self, tok, path):
         """A text-mode read as the phone makes it."""
         c = http.client.HTTPConnection(self.url.replace("http://", ""), timeout=10)
@@ -298,6 +308,12 @@ class Relay:
         self.hosts_flags = {}
         self.pending = {}
         self.replied = {}
+        # late mode: the first read of the first pane is held this long, then answered with marked rows.
+        self.late = 60
+        self.held = False
+        self.answered_late = False
+        # lie-desk mode: the desks forged, one per request, round and round.
+        self.desks = 0
         self.log = open(logs / "relay.log", "a")
         self.requests = []
         self.port = free_port()
@@ -315,6 +331,22 @@ class Relay:
                 relay.log.write(f"{time.strftime('%H:%M:%S')} {self.command} {self.path} "
                                 f"headers={sorted(self.headers.keys())} body={len(body)}\n")
                 relay.log.flush()
+                if relay.mode == "late" and self.command == "GET" and self.path.startswith(f"/v1/panes/{HOST}/work/0.0?") and not relay.held:
+                    # The phone's patience is 45 s: this answer comes after it gave up and went elsewhere.
+                    relay.held = True
+                    time.sleep(relay.late)
+                    relay.answered_late = True
+                    return self.reply(200, b"LATE ANSWER\n", {"Content-Type": "text/plain; charset=utf-8"})
+                if relay.mode == "slow" and self.command == "GET" and self.path.startswith("/v1/panes/"):
+                    time.sleep(3)  # long enough for a look at the view before its rows come
+                if relay.mode == "lie-desk" and self.path == "/v1/desk":
+                    # Desks a hub would never send: a path up, a stranger's pane, 300 letters with control
+                    # characters, a window that is a path; then one that names the list's second pane.
+                    forged = ["../../admin", "bob-desktop/work/0.0", "a" * 300 + "\u001b[2J\u0007", None]
+                    pick = forged[relay.desks % len(forged)]
+                    relay.desks += 1
+                    desk = {"view": "window", "window": "../"} if pick is None else {"view": "panes", "panes": [pick], "focused": pick}
+                    return self.reply(200, json.dumps({"desk": desk}).encode(), {"Content-Type": "application/json"})
                 if relay.mode == "big" and self.command == "GET" and self.path.startswith("/v1/panes/"):
                     return self.reply(200, b"x" * (1 << 20) + b"\n", {})
                 if relay.mode == "garbage" and self.command == "GET" and self.path.startswith("/v1/panes/"):
@@ -503,8 +535,9 @@ PANE_MENU = {"midp1": ["Keys", "Back", "Refresh", "Auto", "Pane", "Settings", "E
              "midp2": ["Keys", "Back", "Image", "Refresh", "Auto", "Mail", "Commands", "Pane", "Later", "Settings", "Exit"]}
 # The pane list's menu the same way; Refresh sits on the right soft key.
 # + session and + pane follow Settings where some host or row allows them (the test agent's flags, or the relay's).
-PANES_MENU = {"midp1": ["Settings", "Exit"], "midp2": ["Inbox", "Messages", "Auto", "Settings", "Exit"]}
-PANES_MENU_PLUS = ["Inbox", "Messages", "Auto", "Settings", "+ session", "+ pane", "Exit"]
+# Desk comes first on the 2.0 build: the view every client shares.
+PANES_MENU = {"midp1": ["Settings", "Exit"], "midp2": ["Desk", "Inbox", "Messages", "Auto", "Settings", "Exit"]}
+PANES_MENU_PLUS = ["Desk", "Inbox", "Messages", "Auto", "Settings", "+ session", "+ pane", "Exit"]
 
 
 class Phone:

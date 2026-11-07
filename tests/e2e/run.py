@@ -772,13 +772,13 @@ def f25(run, name, profile):
 
 # --- the inbox and answers ---------------------------------------------------------
 
-ALLOWED = re.compile(r"^/v1/(hosts|panes|inbox|talk)(\?[^/]*)?$|^/v1/panes/[^/?]+/[^/?]+/[^/?]+(/(input|answer|files|later|mail|close))?(\?[^/]*)?$"
+ALLOWED = re.compile(r"^/v1/(hosts|panes|inbox|talk|desk)(\?[^/]*)?$|^/v1/panes/[^/?]+/[^/?]+/[^/?]+(/(input|answer|files|later|mail|close))?(\?[^/]*)?$"
                      r"|^/v1/hosts/[^/?]+/sessions$|^/v1/windows/[^/?]+/[^/?]+/[^/?]+/panes$")
 # A read-only pane's menu: Refresh takes the soft key, and nothing that writes is offered.
 RO_MENU = ["Back", "Auto", "Mail", "Pane", "Settings", "Exit"]
 MENU_WITH_CLOSE = ["Keys", "Back", "Image", "Refresh", "Auto", "Mail", "Commands", "Pane", "Later", "Settings", "Close", "Exit"]
 # The list's menu with + pane alone (a writable pane, no host that starts sessions).
-PANES_MENU_SPLIT = ["Inbox", "Messages", "Auto", "Settings", "+ pane", "Exit"]
+PANES_MENU_SPLIT = ["Desk", "Inbox", "Messages", "Auto", "Settings", "+ pane", "Exit"]
 
 
 def asks(core):
@@ -834,12 +834,15 @@ def s18(run, name, profile):
     phone.shot("capped")
 
 
-@test("S19", "The app requests only the paths a relay forwards: the inbox, an answer, the feed, mail, a session, a split and a close included",
+@test("S19", "The app requests only the paths a relay forwards: the desk, the inbox, an answer, the feed, mail, a session, a split and a close included",
       "e2e-security", profiles=("midp2",))
 def s19(run, name, profile):
     core, relay, phone, tok = setup(run, name, profile, before=asks, sessions=True, close=True, flags="sessions|close|mail|later|ask")
     phone.expect("^" + phone.lp + r"\*\?test-pane", "pane list")
-    phone.pick_list("Inbox")
+    phone.pick_list("Desk", PANES_MENU_PLUS)
+    phone.expect(r"^Alert: The desk is empty", "nothing written to the desk yet")
+    dismiss(phone)
+    phone.pick_list("Inbox", PANES_MENU_PLUS)
     phone.expect(r"^Inbox: \? test-pane", "inbox")
     phone.click("select")
     phone.expect(r"^Answer: yes", "choices")
@@ -885,7 +888,7 @@ def s19(run, name, profile):
     paths = [r["path"] for r in relay.requests]
     bad = [p for p in paths if not ALLOWED.match(p)]
     check(not bad, f"paths outside the relay's list: {bad}")
-    for want in ("/v1/inbox", "/answer", "/v1/talk", "/mail", "/close", "/sessions", "/panes"):
+    for want in ("/v1/desk", "/v1/inbox", "/answer", "/v1/talk", "/mail", "/close", "/sessions", "/panes"):
         check(any(want in p for p in paths), f"{want} never requested: {paths}")
 
 
@@ -1696,6 +1699,164 @@ def f46(run, name, profile):
         phone.click("k9")
         phone.expect(r"^Inbox: zz ! test-pane \(bash\): run it\?\|$", "the inbox row")
         phone.shot("inbox")
+
+
+def no_writes(relay):
+    """Nothing but reads reached the relay."""
+    return [f"{r['method']} {r['path']}" for r in relay.requests if r["method"] != "GET"]
+
+
+@test("S30", "A late answer is nobody's: a read the phone gave up on lands after another pane was opened, and is dropped",
+      "e2e-security")
+def s30(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="late", before=second_pane)
+    phone.expect(r"^Panes: .*test-pane-2", "two panes")
+    phone.click("select")  # the first pane: the relay holds its read past the phone's patience
+    phone.expect(r"^View " + HOST + r"/work/0\.0 writable", "the view")
+    time.sleep(2)
+    check(all(r == "" for r in phone.rows()), f"rows drawn before any answer: {phone.rows()}")
+    check(not any(l.startswith("work/0.0: ") for l in phone.trace()), "content traced before any answer")
+    phone.shot("blank")
+    phone.expect(r"^Alert: No answer from the server", "the give-up", timeout=55)
+    dismiss(phone)
+    time.sleep(1)  # a menu opened right after the alert has picked the wrong entry
+    n = len(phone.trace())
+    phone.pick("Back")
+    phone.expect(r"^Panes: ", "the list again", after=n)
+    phone.key("Down")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable", "the second pane's view", after=n)
+    phone.expect(r"^work/0\.1: ", "its rows", after=n)
+    wait_for("the late answer sent", lambda: relay.answered_late, 40)
+    time.sleep(2)
+    check(not any("LATE ANSWER" in l for l in phone.trace()), "the late answer reached a view")
+    check(not any(l.startswith("work/0.0: ") for l in phone.trace()), "the first pane's rows were traced")
+    rows = phone.rows()
+    check(any(r.strip() for r in rows) and not any("LATE" in r for r in rows), f"the screen: {rows}")
+    check(not no_writes(relay), f"something was written: {no_writes(relay)}")
+    phone.shot("other")
+
+
+@test("S31", "A relay that forges the desk: a path up, a stranger's pane, 300 letters with control characters, a window that is a path",
+      "e2e-security", profiles=("midp2",))
+def s31(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-desk", before=second_pane)
+    phone.expect(r"^Panes: .*test-pane-2", "two panes")
+    for want in ("../../admin", "bob-desktop/work/0.0", "a" * 64, "../."):
+        n = len(phone.trace())
+        phone.pick_list("Desk")
+        phone.expect(r"^Desk " + re.escape(want), "the forged pick read", after=n)
+        phone.expect(r"^Alert: The desk's pane is not in the list", "nothing opened", after=n)
+        check(not any(l.startswith("View ") for l in phone.trace()[n:]), "a pane opened on a forged desk")
+        dismiss(phone)
+    phone.shot("forged")
+    check(not no_writes(relay), f"something was written: {no_writes(relay)}")
+    paths = {r["path"].split("?")[0] for r in relay.requests}
+    check(paths <= {"/v1/desk", "/v1/hosts", "/v1/panes"}, f"paths asked for: {paths}")
+
+
+@test("S32", "A read-only token on one pane: the hub keeps the desk's other panes from it, and the phone opens what is left, read-only",
+      "e2e-security", profiles=("midp2",))
+def s32(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, read=f"{HOST}/work/0.0", write=None, before=second_pane)
+    phone.expect(r"^Panes: .*test-pane", "the one pane")
+    owner = core.token()
+    status, body = core.desk(owner, {"view": "panes", "panes": [f"{HOST}/work/0.0", f"{HOST}/work/0.1"],
+                                     "focused": f"{HOST}/work/0.1", "arrangement": "row"})
+    check(status == 200, f"the owner's desk refused: {status} {body[:80]}")
+    n = len(phone.trace())
+    phone.pick_list("Desk")
+    phone.expect(r"^Desk " + HOST + r"/work/0\.0$", "the focus the token may not read is gone; the first pane left", after=n)
+    phone.expect(r"^View " + HOST + r"/work/0\.0 read-only", "opened read-only", after=n)
+    phone.expect(r"^work/0\.0: ", "its rows", after=n)
+    check(not any("work/0.1" in l for l in phone.trace()), "the other pane's address reached the phone")
+    check(not no_writes(relay), f"something was written: {no_writes(relay)}")
+    phone.shot("reader")
+
+
+@test("F47", "A pane that is gone closes with a word and the list is read again: on a refresh, and on a key sent", "e2e-ui")
+def f47(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=second_pane)
+    phone.expect(r"^Panes: .*test-pane-2", "two panes")
+    phone.key("Down")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable", "the second pane")
+    phone.expect(r"^work/0\.1: ", "its rows")
+    core.tmux_cmd("kill-pane", "-t", "work:0.1")
+    time.sleep(1.5)  # the hub lists from a one-second cache
+    n = len(phone.trace())
+    phone.click("k1")  # refresh
+    phone.expect(r"^Alert: This pane is gone", "the word", after=n)
+    shown = phone.expect(r"^Panes: ", "the list again", after=n)
+    check("test-pane-2" not in shown, f"the dead pane still listed: {shown!r}")
+    phone.shot("gone")
+    dismiss(phone)
+    # Once more with a key: the hub refuses the input of a pane that is not there.
+    second_pane(core)
+    time.sleep(1.5)
+    n = len(phone.trace())
+    phone.click("right")  # Refresh
+    phone.expect(r"^Panes: .*test-pane-2", "two panes again", after=n)
+    phone.key("Down")
+    phone.click("select")
+    phone.expect(r"^work/0\.1: ", "its rows", after=n)
+    core.tmux_cmd("kill-pane", "-t", "work:0.1")
+    time.sleep(1.5)
+    n = len(phone.trace())
+    phone.click("k0")  # Keys
+    phone.expect(r"^Keys$", "the keys", after=n)
+    phone.click("select")  # Enter
+    phone.expect(r"^Alert: This pane is gone", "the word after the key", after=n)
+    shown = phone.expect(r"^Panes: ", "the list once more", after=n)
+    check("test-pane-2" not in shown, f"the dead pane still listed: {shown!r}")
+
+
+@test("F48", "While a pane view has nothing of its own it shows the warm-up (2.0) or a blank box (1.0), never another screen", "e2e-ui")
+def f48(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="slow")
+    phone.expect(r"^Panes: .*test-pane", "pane list")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.0", "the view")
+    time.sleep(1.2)
+    phone.shot("warm-up" if profile == "midp2" else "blank")
+    check(not any(l.startswith("work/0.0: ") for l in phone.trace()), "rows traced before the answer")
+    check(all(r == "" for r in phone.rows()), f"rows drawn before the answer: {phone.rows()}")
+    if profile == "midp2":
+        phone.expect(r"^Warm-up$", "the tube coming on")
+    phone.expect(r"^work/0\.0: ", "the rows", timeout=10)
+    if profile == "midp2":
+        lines = phone.trace()
+        check(lines.index("Warm-up") < next(i for i, l in enumerate(lines) if l.startswith("work/0.0: ")), "the warm-up came after the rows")
+    phone.shot("rows")
+
+
+@test("F49", "Desk on the list's menu opens the desk's focused pane; without a focus the first; a window desk its first pane; an empty desk says so",
+      "e2e-ui", profiles=("midp2",))
+def f49(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=second_pane)
+    phone.expect(r"^Panes: .*test-pane-2", "two panes")
+    phone.pick_list("Desk")
+    phone.expect(r"^Desk empty$", "nothing written yet")
+    phone.expect(r"^Alert: The desk is empty", "said so")
+    phone.shot("empty")
+    dismiss(phone)
+    for desk, want in (({"view": "panes", "panes": [f"{HOST}/work/0.0", f"{HOST}/work/0.1"], "focused": f"{HOST}/work/0.1",
+                         "arrangement": "row"}, "0.1"),
+                       ({"view": "panes", "panes": [f"{HOST}/work/0.1", f"{HOST}/work/0.0"]}, "0.1"),
+                       ({"view": "window", "window": f"{HOST}/work/0"}, "0.0")):
+        status, body = core.desk(tok, desk)
+        check(status == 200, f"the desk refused: {status} {body[:80]}")
+        n = len(phone.trace())
+        phone.pick_list("Desk")
+        phone.expect(r"^View " + HOST + r"/work/" + want.replace(".", r"\.") + " writable", f"the desk's pane {want} opened", after=n)
+        phone.expect(r"^work/" + want.replace(".", r"\.") + ": ", "its rows", after=n)
+        if desk["view"] == "panes" and "focused" in desk:
+            phone.shot("focused")
+        time.sleep(1)  # the read's ring stops; a menu opened under it has picked the wrong entry
+        n = len(phone.trace())
+        phone.pick("Back")
+        phone.expect(r"^Panes: ", "the list", after=n)
+    check(not no_writes(relay), f"the phone wrote something: {no_writes(relay)}")
 
 
 # --- runner -------------------------------------------------------------------------
