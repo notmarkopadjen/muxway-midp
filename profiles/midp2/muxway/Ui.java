@@ -40,6 +40,10 @@ final class Ui {
     // Desk on the list's menu: the desk's focused pane opened from the hub's desk.
     static final boolean DESK = true;
 
+    // The pane known by its id from the listing's last column, checked against every read's Muxway-Pane,
+    // and followed to its new address when the host renumbers.
+    static final boolean IDS = true;
+
     private Ui() {
     }
 }

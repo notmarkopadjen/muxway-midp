@@ -84,7 +84,10 @@ little, and does it on purpose:
   it was opened for, or nothing; a late answer for another pane is
   dropped, a pane that is gone closes with a word and the list comes
   back, and while the view waits for its first rows the MIDP 2.0 build
-  shows the tube warming up in the theme's ink.
+  shows the tube warming up in the theme's ink. The MIDP 2.0 build
+  knows its pane by id and follows it when the host renumbers, so a
+  stranger's rows are never drawn under its title and a key reaches the
+  pane the owner sees.
 - **The desk** (MIDP 2.0 build): *Desk* on the list's menu opens the
   pane the owner's other clients are focused on, from the view the hub
   keeps for them; the phone reads it and never moves it. See

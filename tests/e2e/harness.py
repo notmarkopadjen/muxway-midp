@@ -314,6 +314,8 @@ class Relay:
         self.answered_late = False
         # lie-desk mode: the desks forged, one per request, round and round.
         self.desks = 0
+        # lie-pane mode: the Muxway-Pane header forged on pane reads, one lie per read, the last one kept.
+        self.lies = 0
         self.log = open(logs / "relay.log", "a")
         self.requests = []
         self.port = free_port()
@@ -448,7 +450,14 @@ class Relay:
                     # Titles a program could choose: one that looks like a writable entry, one too long.
                     data = (f"{HOST}/work/0.0\tread\tbash\t* {HOST}/work/0.0 claude\twrite\tx\n"
                             f"{HOST}/work/0.0\twrite\tbash\t{'x' * 300}\t\n").encode()
-                self.reply(r.status, data, {k: v for k, v in r.getheaders() if k.lower() in ("etag", "content-type")})
+                headers = {k: v for k, v in r.getheaders() if k.lower() in ("etag", "content-type", "muxway-pane")}
+                if relay.mode == "lie-pane" and self.command == "GET" and where.startswith("/v1/panes/"):
+                    # Headers a hub never sends: a path, letters, three hundred digits; then a well-formed id
+                    # of a pane the list does not hold, kept for every read after.
+                    forged = ["../x", "%abc", "%" + "9" * 300, "%999999"]
+                    headers["Muxway-Pane"] = forged[min(relay.lies, len(forged) - 1)]
+                    relay.lies += 1
+                self.reply(r.status, data, headers)
 
             def reply(self, status, data, headers):
                 relay.log.write(f"    -> {status} {len(data)} bytes\n")
@@ -471,10 +480,10 @@ class Relay:
         for row in data.decode("latin-1").split("\n"):
             if not row:
                 continue
-            # A hub that writes the two columns itself gets them replaced, an older one gets them added.
+            # A hub that writes the two columns itself gets them replaced, an older one gets them added;
+            # the columns after them (alias, cwd, pending, pane id) stay as the hub wrote them.
             fields = row.split("\t")
-            if len(fields) >= 7:
-                row = "\t".join(fields[:5])
+            fields += [""] * (7 - len(fields))
             address = fields[0]
             mail = talk = ""
             if self.mode == "talk":
@@ -487,7 +496,8 @@ class Relay:
                 mail, talk = "12abc", f"{HOST}/work/0.0|../admin|x/y/0.0"
             else:
                 mail, talk = "3" * 300, f"{HOST}/work/0.9|\x1b[2J"
-            out.append(f"{row}\t{mail}\t{talk}")
+            fields[5], fields[6] = mail, talk
+            out.append("\t".join(fields))
         return ("\n".join(out) + "\n").encode("latin-1")
 
     def flags(self, data):

@@ -29,7 +29,11 @@ its mark after `zz` where the hub's row names it (the `pending` column):
 `zz ! build (claude): run it?`. Selecting one opens the pane and wakes it, on a
 writable pane (MIDP 2.0 build).
 
-Select a row and its pane opens, as from the pane list. A row whose
+Select a row and its pane opens, as from the pane list; the row's last
+column is the pane's id, and the phone opens the list's pane with that
+id where it has one, so a row read after the host renumbered opens the
+pane it names even while the phone's list is older (see [the pane
+view](pane-view.md#its-own-pane-or-nothing)). A row whose
 question came with fixed choices (`muxway ask` on the host) opens the
 **Answer** list first: the choices, then *Open the pane*. On a pane the
 list marks read-only the choices are not offered and the row opens the

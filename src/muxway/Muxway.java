@@ -66,6 +66,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private final Vector names = new Vector();
     private final Vector commands = new Vector();
     private final Vector writable = new Vector();
+    // The pane id of each row, what a view knows its pane by; MIDP 2.0 build only.
+    private Vector ids;
     // The kind's mark of each pane, as the list drew it; the overlay shows it. MIDP 2.0 build only.
     private Vector marks;
     // Whether each row's pane is parked for later; MIDP 2.0 build only.
@@ -158,6 +160,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         if (Ui.NAMES) {
             marks = new Vector();
+        }
+        if (Ui.IDS) {
+            ids = new Vector();
         }
         if (Ui.LATER) {
             later = new Vector();
@@ -532,6 +537,19 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
     }
 
+    /**
+     * Opens the list's pane with that id where the list knows it, else the pane at the address: an
+     * inbox row read after the host renumbered names the pane the phone's list has elsewhere.
+     */
+    void open(String address, String id) {
+        int i = Ui.IDS && id.length() > 0 ? ids.indexOf(id) : -1;
+        if (i >= 0) {
+            open(i);
+        } else {
+            open(address);
+        }
+    }
+
     /** An image chosen on the phone goes up to the pane's host; Reply then holds its path. */
     void picked(Picture p) {
         display.setCurrent(view);
@@ -623,6 +641,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view.name = (String) names.elementAt(i);
         view.command = (String) commands.elementAt(i);
         view.writable = canWrite;
+        if (Ui.IDS) {
+            view.id = (String) ids.elementAt(i);
+        }
         if (Ui.NAMES) {
             view.mark = (String) marks.elementAt(i);
         }
@@ -662,7 +683,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         view.addCommand(exit);
         view.setCommandListener(this);
         auto = false;
-        Trace.show("View " + address + (canWrite ? " writable" : " read-only"));
+        Trace.show("View " + address + (canWrite ? " writable" : " read-only") + (Ui.IDS && view.id.length() > 0 ? " " + view.id : ""));
         display.setCurrent(view);
         start(OPEN, null);
     }
@@ -883,6 +904,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         names.removeAllElements();
         commands.removeAllElements();
         writable.removeAllElements();
+        if (Ui.IDS) {
+            ids.removeAllElements();
+        }
         if (Ui.NAMES) {
             marks.removeAllElements();
         }
@@ -932,6 +956,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             names.addElement(name);
             commands.addElement(f[2].trim());
             writable.addElement(new Boolean(w));
+            if (Ui.IDS) {
+                // The pane's id, the row's last column; a row without one, or with one that is no id, gives none.
+                ids.addElement(f.length > 10 && Text.paneId(f[10].trim()) ? f[10].trim() : "");
+            }
             if (Ui.NAMES) {
                 marks.addElement(mark);
             }
@@ -978,7 +1006,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         int[] group = Talk.groups(addresses, talk);
         boolean framed = Talk.any(group);
-        Vector[] kept = {addresses, names, commands, writable, later, marks};
+        // The parallel vectors, the ids among them, so a view opened from a regrouped row gets its own pane's id.
+        Vector[] kept = Ui.IDS ? new Vector[] {addresses, names, commands, writable, later, marks, ids}
+            : new Vector[] {addresses, names, commands, writable, later, marks};
         Object[][] was = new Object[kept.length][];
         for (int k = 0; k < kept.length; k++) {
             was[k] = new Object[kept[k].size()];
@@ -1080,7 +1110,17 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         String path = "panes/" + v.address + "?lines=" + Ui.LINES + "&width=400"
             + (charset().length() > 0 ? "&" + charset() : "");
         int status = api.call(path, null, ifNoneMatch);
-        if (status == 304 || v != view) {
+        if (v != view) {
+            return;
+        }
+        if (Ui.IDS && (status == 200 || status == 304) && v.id.length() > 0 && Text.paneId(api.pane) && !api.pane.equals(v.id)) {
+            // Another pane answered at the view's address: the host renumbered when a pane closed. Nothing of
+            // it is drawn; the list says where the view's pane is now. A header that is no id is unknown.
+            Trace.show("Stranger " + api.pane + " at " + v.address);
+            moved(v);
+            return;
+        }
+        if (status == 304) {
             return;
         }
         if (status != 200) {
@@ -1089,6 +1129,52 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
         etag = api.etag;
         v.setText(api.body);
+    }
+
+    /**
+     * The view's pane is not at its address any more. The list again, quietly; then the view follows its
+     * pane to the address the list names and reads once more, or, listed nowhere, is gone. A stranger
+     * answering the second read too ends it the same way, so a hub or a relay that never agrees cannot
+     * send the phone round in a circle. MIDP 2.0 build only.
+     */
+    private void moved(PaneView v) throws IOException {
+        list();
+        int k = v == view ? ids.indexOf(v.id) : -1;
+        if (k >= 0) {
+            String address = (String) addresses.elementAt(k);
+            Trace.show("Follow " + v.id + " " + v.address + " " + address);
+            v.address = address;
+            v.title = address.substring(address.indexOf('/') + 1);
+            v.name = (String) names.elementAt(k);
+            v.command = (String) commands.elementAt(k);
+            if (Ui.NAMES) {
+                v.mark = (String) marks.elementAt(k);
+            }
+            if (Ui.LATER) {
+                v.later = ((Boolean) later.elementAt(k)).booleanValue();
+            }
+            // One more read, checked once: the pane's own rows, or a stranger again, which is the end.
+            int status = api.call("panes/" + address + "?lines=" + Ui.LINES + "&width=400"
+                + (charset().length() > 0 ? "&" + charset() : ""), null, null);
+            if (v != view) {
+                return;
+            }
+            boolean stranger = (status == 200 || status == 304) && Text.paneId(api.pane) && !api.pane.equals(v.id);
+            if (!stranger) {
+                if (status == 200) {
+                    etag = api.etag;
+                    v.setText(api.body);
+                } else if (status != 304) {
+                    problem(status);
+                }
+                return;
+            }
+            Trace.show("Stranger " + api.pane + " at " + address);
+        }
+        auto = false;
+        view = null;
+        display.setCurrent(panes);
+        alert("This pane is gone.", panes);
     }
 
     private void readInbox() throws IOException {

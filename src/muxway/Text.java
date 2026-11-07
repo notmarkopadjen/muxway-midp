@@ -344,6 +344,20 @@ final class Text {
         return true;
     }
 
+    /** A pane's id as the hub writes it: % and one to nine digits. Anything else is no id. */
+    static boolean paneId(String s) {
+        if (s.length() < 2 || s.length() > 10 || s.charAt(0) != '%') {
+            return false;
+        }
+        for (int i = 1; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < '0' || c > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** A session name a client may start: a-z, 0-9, - and _, one to 32 of them. */
     static boolean session(String s) {
         if (s.length() < 1 || s.length() > 32) {

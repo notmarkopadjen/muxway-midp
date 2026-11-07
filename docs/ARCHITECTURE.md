@@ -121,7 +121,10 @@ stateDiagram-v2
   another pane is dropped, a pane that is gone (`404`) closes with a
   word and the list is read again; while it has nothing of its own the
   2.0 build draws a CRT warm-up in the ink, the 1.0 build a blank box.
-  See [the pane view](features/pane-view.md).
+  The 2.0 build knows its pane by id, the listing's last column, checks
+  every read's `Muxway-Pane` against it and follows the pane to its new
+  address when the host renumbers, drawing nothing of the pane that
+  took the old one. See [the pane view](features/pane-view.md).
 - **Reply** is a `TextBox`; control characters are removed before sending.
   Send and Type return to the pane at once, where the wait mark runs
   until the hub has answered; a refusal is shown over the pane.
@@ -185,12 +188,15 @@ What a relay has to pass, and all the app ever asks for:
   written. No other route: no `/v1/me`, no tree, no long-poll or events.
 - Text mode only: `Accept: text/plain`, and the answers are read as
   `text/plain`. Of the pane listing's columns both builds read `alias`,
-  the eighth, and the MIDP 2.0 build also `mail`, `talk`, `cwd` and
-  `pending`, the sixth, seventh, ninth and tenth, where the hub writes
-  them; rows without them list as before. The hosts listing's third
+  the eighth, and the MIDP 2.0 build also `mail`, `talk`, `cwd`,
+  `pending` and `pane_id`, the sixth, seventh, ninth, tenth and
+  eleventh, where the hub writes them; rows without them list as
+  before. The hosts listing's third
   column, the host's flags as words joined by `|`, says where `+
   session`, Close and Mail are offered (2.0 build); the inbox's sixth
-  column is `pending`; the mail row's seventh is `replied`. Every reader
+  column is `pending` and its seventh `pane_id`; the mail row's seventh
+  is `replied`. A pane read's `Muxway-Pane` header, the id of the pane
+  that answered, is checked against the view's (2.0 build). Every reader
   ignores columns and words it does not know. The answers to a split
   and a session are JSON; the phone reads the pane's `address` from
   them and nothing else; the desk is JSON too, and the phone reads

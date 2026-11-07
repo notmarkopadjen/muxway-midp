@@ -15,7 +15,10 @@ plain HTTP from the phone and forwards it to the hub over HTTPS.
   /v1/windows/{host}/{session}/{window}/panes` and `GET /v1/desk`
   (never `PUT`), to the hub, with
   their query string and the headers `X-Muxway-Token`, `Accept`,
-  `Content-Type` and the body. These are the only paths the app
+  `Content-Type` and the body, and back the status, the body,
+  `Content-Type`, `ETag` and `Muxway-Pane` (the id of the pane a read
+  answered for; a relay that drops it costs the phone the check that
+  its rows are its own pane's). These are the only paths the app
   requests (see [the protocol features
   used](../ARCHITECTURE.md#protocol-features-used)), and the example
   below names each of them and nothing wider. Nothing else: a relay

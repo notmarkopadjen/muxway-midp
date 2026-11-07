@@ -33,6 +33,9 @@ final class PaneView extends Canvas {
     // What the list called the pane; the overlay shows it.
     String name = "";
     String address = "";
+    // The pane's id from the list, what the view knows its pane by; empty for a hub without ids. Set at open;
+    // MIDP 2.0 build only, dropped from the 1.0 build for the bytes.
+    String id;
     boolean writable;
     // What the pane waits for, as the list marked it: ? ! z v, zz, zz !, or a space.
     String mark = " ";

@@ -40,6 +40,10 @@ final class Ui {
     // The desk's focused pane from the list's menu: a request and a reader the cap has no room for.
     static final boolean DESK = false;
 
+    // The pane known by its id and followed on a renumber: a column, a header, a check and a follow,
+    // over the cap (see docs/plans/2026-11-07-pane-id.md); the pane is known by its address.
+    static final boolean IDS = false;
+
     private Ui() {
     }
 }
