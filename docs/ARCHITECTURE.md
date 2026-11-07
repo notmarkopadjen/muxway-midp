@@ -102,6 +102,9 @@ stateDiagram-v2
   `List` of two or three answers before `POST
   /v1/windows/{host}/{session}/{window}/panes` and `POST
   /v1/panes/{address}/close`. See [new panes](features/new-panes.md).
+  **Desk** on the list's menu reads `GET /v1/desk` and opens the desk's
+  focused pane, the first of its panes, or its window's first pane in
+  the list, never writing it. See [the desk](features/desk.md).
 - **Pane** is a `Canvas`, not a `Form`: a MIDP 1.0 form opens at its top
   and cannot be scrolled from code, while a terminal must open at its
   bottom. The canvas fills the whole screen with the rows in a monospace
@@ -113,8 +116,12 @@ stateDiagram-v2
   and Keys, `#` overlays title and position, `*` reveals what a lens hid,
   the green call key of Nokia phones sends Enter, left and right open
   the previous and the next pane. On the 2.0 build it is painted in the
-  theme Settings chose, amber, green or paper. See
-  [the pane view](features/pane-view.md).
+  theme Settings chose, amber, green or paper. It shows its own pane's
+  rows or nothing: a canvas is made afresh per pane, a late answer for
+  another pane is dropped, a pane that is gone (`404`) closes with a
+  word and the list is read again; while it has nothing of its own the
+  2.0 build draws a CRT warm-up in the ink, the 1.0 build a blank box.
+  See [the pane view](features/pane-view.md).
 - **Reply** is a `TextBox`; control characters are removed before sending.
   Send and Type return to the pane at once, where the wait mark runs
   until the hub has answered; a refusal is shown over the pane.
@@ -148,7 +155,10 @@ sequenceDiagram
   network. A command during a job says "Still waiting for the last answer".
 - MIDP has no request timeout. A watchdog gives up on a job after 45 s,
   says "No answer from the server", and the app is usable again; a late
-  answer from the abandoned job is ignored.
+  answer from the abandoned job is ignored: a pane read sets its rows on
+  the view it was asked for, and only while that view is still the one
+  open, so the rows of a pane left behind never reach the pane opened
+  after it.
 - Every response is read before the connection is closed, also an empty
   one: some phones release their single HTTP connection only then.
 - At most 32 KiB of an answer is read; control characters are dropped
@@ -170,8 +180,9 @@ What a relay has to pass, and all the app ever asks for:
   /v1/panes/{address}/mail` for [messages](features/messages.md), and
   `POST /v1/hosts/{host}/sessions`, `POST
   /v1/windows/{host}/{session}/{window}/panes` and `POST
-  /v1/panes/{address}/close` for [new panes](features/new-panes.md).
-  No other route: no `/v1/me`, no tree, no long-poll or events.
+  /v1/panes/{address}/close` for [new panes](features/new-panes.md),
+  and `GET /v1/desk` for [the desk](features/desk.md), read and never
+  written. No other route: no `/v1/me`, no tree, no long-poll or events.
 - Text mode only: `Accept: text/plain`, and the answers are read as
   `text/plain`. Of the pane listing's columns both builds read `alias`,
   the eighth, and the MIDP 2.0 build also `mail`, `talk`, `cwd` and
@@ -182,7 +193,8 @@ What a relay has to pass, and all the app ever asks for:
   column is `pending`; the mail row's seventh is `replied`. Every reader
   ignores columns and words it does not know. The answers to a split
   and a session are JSON; the phone reads the pane's `address` from
-  them and nothing else.
+  them and nothing else; the desk is JSON too, and the phone reads
+  `focused`, the first of `panes` and `window` from it.
 - Query parameters: `charset=latin1` or `charset=ascii` on `panes` and on a
   pane read when the Text setting is not Unicode; `lines=<n>` and
   `width=400` on a pane read.

@@ -11,8 +11,9 @@ plain HTTP from the phone and forwards it to the hub over HTTPS.
   and `POST /v1/panes/{address}/files`, `GET /v1/inbox`, `POST
   /v1/panes/{address}/answer`, `POST /v1/panes/{address}/later`, `GET
   /v1/talk`, `GET` and `POST /v1/panes/{address}/mail`, `POST
-  /v1/panes/{address}/close`, `POST /v1/hosts/{host}/sessions` and
-  `POST /v1/windows/{host}/{session}/{window}/panes`, to the hub, with
+  /v1/panes/{address}/close`, `POST /v1/hosts/{host}/sessions`, `POST
+  /v1/windows/{host}/{session}/{window}/panes` and `GET /v1/desk`
+  (never `PUT`), to the hub, with
   their query string and the headers `X-Muxway-Token`, `Accept`,
   `Content-Type` and the body. These are the only paths the app
   requests (see [the protocol features
@@ -68,7 +69,7 @@ app against the same list; a relay for the MIDP 1.0 build alone needs
 
 ```caddyfile
 :8080 {
-	@client path_regexp ^/v1/(hosts|panes|inbox|talk)$|^/v1/panes/[^/]+/[^/]+/[^/]+(/(input|answer|files|later|mail|close))?$|^/v1/hosts/[^/]+/sessions$|^/v1/windows/[^/]+/[^/]+/[^/]+/panes$
+	@client path_regexp ^/v1/(hosts|panes|inbox|talk|desk)$|^/v1/panes/[^/]+/[^/]+/[^/]+(/(input|answer|files|later|mail|close))?$|^/v1/hosts/[^/]+/sessions$|^/v1/windows/[^/]+/[^/]+/[^/]+/panes$
 	request_body @client {
 		max_size 8MB
 	}

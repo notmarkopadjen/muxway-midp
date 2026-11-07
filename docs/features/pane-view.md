@@ -154,6 +154,46 @@ edge, bottom-aligned, so the last row is always a full one and the spare
 pixels sit at the top. On a 96x65 screen that is five rows of some twenty
 characters.
 
+### Its own pane or nothing
+
+The view shows the rows of the pane it was opened for, or nothing, as
+every client's tile does (the core's
+[guideline](https://github.com/notmarkopadjen/muxway/blob/main/docs/ui-guideline.md),
+§1.4 *tiles*). A canvas is made afresh for every pane opened, so no
+rows of the pane before are ever kept; and an answer that comes late,
+for a read the phone gave up on (45 s) while the owner went on to
+another pane, is dropped, not drawn: the rows are set on the view they
+were asked for, and only while it is still the one open.
+
+While the view has nothing of its own and a request runs, the MIDP 2.0
+build draws the tube coming on in the theme's ink: a line at mid-height
+that widens from the centre to the whole width, opens into a band and
+settles to a line, 150 ms a step with the wait mark, until the first
+rows come. Never a borrowed screen, never a spinner in the box. The
+smallest screen stays blank, with the wait mark in its corner as for
+every request.
+
+A pane that is gone, because its program ended or its owner closed it,
+answers `404` to a read or a key; the view says *This pane is gone.*,
+leaves, and the list is read again before the word is shown, so the
+word's dismissal lands on a fresh list. Nothing is drawn under the dead
+pane's address again: the host renumbers panes when one closes, and the
+rows at that address may be another pane's. The phone cannot tell a
+renumbered pane from the one it opened by itself, since the hub's text
+listing carries no `pane_id` (a gap reported to the core); until it
+does, the rule it keeps is this one.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Opening: the view made, nothing of its own
+    Opening --> Rows: the pane's rows (its own answer)
+    Opening --> Opening: a late answer for another pane: dropped
+    Rows --> Rows: refresh, auto refresh, a key then the read
+    Rows --> Gone: 404, "This pane is gone.", the list again
+    Opening --> Gone: 404
+    note right of Opening: 2.0: the warm-up while a request runs; 1.0: blank
+```
+
 ## Keypad
 
 | Key | Does |
@@ -237,7 +277,8 @@ on a pane the token cannot write when it fits (MIDP 2.0); the bottom one
 with the rows on screen out of the rows the app holds (`7-12/40`) and,
 when it fits next to that, the key hints. The mark is the list's: it
 changes with the next listing, and *Later* and *Wake* move it. `#` again removes them. While a request is out a small wait
-bar runs in the top right corner, overlay or not.
+bar runs in the top right corner, overlay or not (a turning ring in the
+ink on the 2.0 build).
 
 ## Wrapping
 

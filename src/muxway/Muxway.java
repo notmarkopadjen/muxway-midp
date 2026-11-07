@@ -22,7 +22,7 @@ import javax.microedition.midlet.MIDlet;
 public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private static final int LIST = 1, OPEN = 2, REFRESH = 3, POLL = 4, SEND = 5, TYPE = 6, KEY = 7, PROBE = 8, UPLOAD = 9,
         INBOX = 10, ANSWER = 11, LATER = 12, LISTQ = 13, SESSION = 14, TALK = 15, MAIL = 16, MAILTO = 17, SPLIT = 18,
-        CLOSE = 19;
+        CLOSE = 19, DESK = 20;
 
     // Labels on the phone, names in the protocol.
     private static final String[][] KEYS = {
@@ -90,6 +90,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     // The pane whose window + pane splits, and the pane a job wants opened once it is done.
     private String splitting;
     private int openNext = -1;
+    // Desk on the list's menu: the desk's focused pane opened from the hub's desk; MIDP 2.0 build only.
+    private Command deskCmd;
     private PaneView view;
     private final TextBox reply = new TextBox("Reply", "", 500, TextField.ANY);
     private final List keys = new List("Keys", List.IMPLICIT);
@@ -146,6 +148,11 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         setup.addCommand(exit);
         setup.setCommandListener(this);
 
+        if (Ui.DESK) {
+            // First of the list's entries: the desk is the view every client shares.
+            deskCmd = new Command("Desk", Command.SCREEN, 4);
+            panes.addCommand(deskCmd);
+        }
         if (Ui.INBOX) {
             panes.addCommand(inboxCmd);
         }
@@ -381,6 +388,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             if (listAuto) {
                 pollList();
             }
+        } else if (Ui.DESK && d == panes && c == deskCmd) {
+            start(DESK, null);
         } else if (Ui.INBOX && c == inboxCmd) {
             inbox(panes);
         } else if (d == view && c == back) {
@@ -695,6 +704,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             form = true;
             note = what == TALK ? "Loading messages..." : what == MAILTO ? "Sending mail..." : "Loading mail...";
         }
+        if (Ui.DESK && what == DESK) {
+            form = true;
+            note = "Reading the desk...";
+        }
         if (form) {
             waitNote.setText(note);
             display.setCurrent(wait);
@@ -825,7 +838,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 }
                 break;
             default:
-                if (Ui.HOSTS || Ui.MAIL) {
+                if (Ui.HOSTS || Ui.MAIL || Ui.DESK) {
                     more();
                 }
             }
@@ -841,8 +854,8 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         } finally {
             finish(mine);
         }
-        if (Ui.HOSTS && openNext >= 0) {
-            // A pane a job just made: opened after the job, since a job runs alone.
+        if ((Ui.HOSTS || Ui.DESK) && openNext >= 0) {
+            // A pane a job just made, or the desk's: opened after the job, since a job runs alone.
             int i = openNext;
             openNext = -1;
             open(i);
@@ -1058,14 +1071,16 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     }
 
     private void read(String ifNoneMatch) throws IOException {
-        if (view == null) {
+        // The view asked for: an answer that comes after another pane was opened is nobody's and is dropped.
+        PaneView v = view;
+        if (v == null) {
             return;
         }
         // The rows as they are on the terminal; the phone wraps them itself.
-        String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=400"
+        String path = "panes/" + v.address + "?lines=" + Ui.LINES + "&width=400"
             + (charset().length() > 0 ? "&" + charset() : "");
         int status = api.call(path, null, ifNoneMatch);
-        if (status == 304) {
+        if (status == 304 || v != view) {
             return;
         }
         if (status != 200) {
@@ -1073,7 +1088,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             return;
         }
         etag = api.etag;
-        view.setText(api.body);
+        v.setText(api.body);
     }
 
     private void readInbox() throws IOException {
@@ -1163,7 +1178,61 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         case CLOSE:
             close();
             break;
+        case DESK:
+            desk();
+            break;
         }
+    }
+
+    /**
+     * The desk, the view the owner's clients share, read from the hub and
+     * never written: its focused pane opens, else the first of its panes,
+     * else the first pane of its window in the list. Only a pane the list
+     * holds opens, so a desk can name nothing the hub did not list for
+     * this token. MIDP 2.0 build only.
+     */
+    private void desk() throws IOException {
+        int status = api.call("desk", null, null);
+        if (status == 404) {
+            alert("This hub has no desk.", panes);
+            return;
+        }
+        if (status != 200) {
+            problem(status);
+            return;
+        }
+        String want = Text.deskFocus(api.body);
+        Trace.show("Desk " + (want == null ? "empty" : want));
+        if (want == null) {
+            alert("The desk is empty.", panes);
+            return;
+        }
+        int i = deskRow(want);
+        if (i < 0) {
+            // The list may be stale: once more from the hub.
+            display.setCurrent(panes);
+            list();
+            i = deskRow(want);
+        }
+        if (i < 0) {
+            alert("The desk's pane is not in the list.", panes);
+            return;
+        }
+        reselect((String) addresses.elementAt(i));
+        openNext = i;
+    }
+
+    /** The list's row for the desk's pick: the address, or for a window (a trailing dot) its first pane. */
+    private int deskRow(String want) {
+        if (!want.endsWith(".")) {
+            return addresses.indexOf(want);
+        }
+        for (int i = 0; i < addresses.size(); i++) {
+            if (((String) addresses.elementAt(i)).startsWith(want)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void readMessages() throws IOException {
@@ -1370,7 +1439,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }.start();
     }
 
-    private void problem(int status) {
+    private void problem(int status) throws IOException {
         if (status == 401) {
             auto = false;
             prefs.token = "";
@@ -1379,8 +1448,23 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             fillSetup();
             return;
         }
+        if (status == 404 && view != null && job >= OPEN && job <= KEY) {
+            // The open pane is gone: its last rows are nobody's. The list again, then the word over it.
+            auto = false;
+            view = null;
+            if (Ui.HOSTS) {
+                // The 2.0 list shows itself only when it is the screen already.
+                display.setCurrent(panes);
+            }
+            list();
+            alert("This pane is gone.", panes);
+            return;
+        }
         Displayable next = view != null && display.getCurrent() != panes && job != LIST ? (Displayable) view : panes;
         if (Ui.HOSTS && (job == LISTQ || job == SESSION || job == SPLIT)) {
+            next = panes;
+        }
+        if (Ui.DESK && job == DESK) {
             next = panes;
         }
         if (Ui.MAIL && (job == TALK || job == MAIL || job == MAILTO)) {
@@ -1402,6 +1486,9 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             next = inbox.from;
         }
         if (Ui.HOSTS && (job == LISTQ || job == SESSION || job == SPLIT)) {
+            next = panes;
+        }
+        if (Ui.DESK && job == DESK) {
             next = panes;
         }
         if (Ui.MAIL && (job == TALK || job == MAIL || job == MAILTO)) {

@@ -47,7 +47,14 @@ build() {
         -libraryjars "$api" -microedition -dontoptimize -dontobfuscate -dontnote -dontwarn \
         -keep 'public class muxway.Muxway' >/dev/null
     cp res/*.png "$work/jar/"
-    sed "s/@VERSION@/$VERSION/" "manifest/$manifest" > "$work/MANIFEST.MF"
+    # The JAR's manifest, whole; the 1.0 JAR leaves out the two optional attributes the JAD carries anyway,
+    # and names the build as its maker where jar would write its own version, for the bytes under its cap.
+    if [ "$profile" = midp1 ]; then
+        { sed "s/@VERSION@/$VERSION/" "manifest/$manifest" | grep -v '^MIDlet-\(Description\|Info-URL\):'
+          echo "Created-By: muxway"; } > "$work/MANIFEST.MF"
+    else
+        sed "s/@VERSION@/$VERSION/" "manifest/$manifest" > "$work/MANIFEST.MF"
+    fi
     "$JAVA_HOME/bin/jar" cfm "out/$name.jar" "$work/MANIFEST.MF" -C "$work/jar" .
     {
         sed "s/@VERSION@/$VERSION/" "manifest/$manifest"

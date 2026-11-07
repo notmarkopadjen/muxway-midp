@@ -80,6 +80,15 @@ little, and does it on purpose:
   and the next pane, a Commands list sends a program's starters with
   Enter, the overlay says what the pane waits for and `read-only`, and
   Settings picks the theme, amber, green or paper.
+- **Its own pane or nothing**: the pane view draws the rows of the pane
+  it was opened for, or nothing; a late answer for another pane is
+  dropped, a pane that is gone closes with a word and the list comes
+  back, and while the view waits for its first rows the MIDP 2.0 build
+  shows the tube warming up in the theme's ink.
+- **The desk** (MIDP 2.0 build): *Desk* on the list's menu opens the
+  pane the owner's other clients are focused on, from the view the hub
+  keeps for them; the phone reads it and never moves it. See
+  [the desk](docs/features/desk.md).
 - **Later**: a pane its owner parked shows `zz` in the list and the
   inbox on both builds; on the MIDP 2.0 build *Later* and *Wake* on the
   pane's menu park and wake it, opening a parked pane wakes it, and the
@@ -97,6 +106,7 @@ under 30 KiB.
 - [Reply with an image](docs/features/images.md)
 - [The inbox, and answers to a question](docs/features/inbox.md)
 - [Later, a pane parked by its owner](docs/features/later.md)
+- [The desk, the view every client shares](docs/features/desk.md)
 - [Messages and mail](docs/features/messages.md)
 - [New panes and sessions, and closing a pane](docs/features/new-panes.md)
 - [Running a relay](docs/features/relay.md)

@@ -373,6 +373,16 @@ public final class UnitTest {
         eq("json_string_spaced_and_escaped", Text.jsonString("{ \"bytes\" : 1 ,\n \"path\" : \"a \\\"q\\\" \\\\ \\/ \\u0041\\n\" }", "path"), "a \"q\" \\ / A ");
         eq("json_string_missing_or_not_a_string", String.valueOf(Text.jsonString("{\"bytes\":1}", "path")) + Text.jsonString("{\"path\":12}", "path")
             + Text.jsonString("{\"path\":\"open", "path") + Text.jsonString("{\"path\":\"\\x\"}", "path") + Text.jsonString("", "path"), "nullnullnullnullnull");
+        String desk = "{\"desk\":{\"view\":\"panes\",\"panes\":[\"alice-laptop/work/0.0\", \"alice-laptop/work/1.1\"],\"focused\":\"alice-laptop/work/1.1\",\"rev\":3}}";
+        eq("json_first_of_array", Text.jsonFirst(desk, "panes"), "alice-laptop/work/0.0");
+        eq("json_key_not_a_value_that_equals_it", String.valueOf(Text.jsonString("{\"view\":\"focused\"}", "focused")) + Text.jsonString("{\"a\":\"focused\",\"focused\":\"x\"}", "focused"), "nullx");
+        eq("json_first_empty_missing_or_not_an_array", String.valueOf(Text.jsonFirst("{\"panes\":[]}", "panes")) + Text.jsonFirst("{\"view\":\"panes\"}", "panes")
+            + Text.jsonFirst("{\"panes\":\"x\"}", "panes") + Text.jsonFirst("{\"panes\":[\"\\x\"]}", "panes") + Text.jsonFirst("{\"panes\":[1]}", "panes"), "nullnullnullnullnull");
+        eq("desk_focus_focused", Text.deskFocus(desk), "alice-laptop/work/1.1");
+        eq("desk_focus_first_pane", Text.deskFocus("{\"desk\":{\"view\":\"panes\",\"panes\":[\"alice-laptop/work/0.0\"],\"focused\":\"\"}}"), "alice-laptop/work/0.0");
+        eq("desk_focus_window", Text.deskFocus("{\"desk\":{\"view\":\"window\",\"window\":\"alice-laptop/work/0\",\"rev\":1}}"), "alice-laptop/work/0.");
+        eq("desk_focus_window_with_focus", Text.deskFocus("{\"desk\":{\"view\":\"window\",\"window\":\"alice-laptop/work/0\",\"focused\":\"alice-laptop/work/0.1\"}}"), "alice-laptop/work/0.1");
+        eq("desk_focus_empty", String.valueOf(Text.deskFocus("{\"desk\":{\"view\":\"panes\"}}")) + Text.deskFocus("{\"desk\":{\"view\":\"panes\",\"panes\":[]}}") + Text.deskFocus(""), "nullnullnull");
         eq("image_type_by_name", String.valueOf(Text.imageType("a.JPG")) + Text.imageType("b.jpeg") + Text.imageType("c.png") + Text.imageType("d.gif")
             + Text.imageType("e.txt") + Text.imageType("jpg"), "image/jpegimage/jpegimage/pngimage/gifnullnull");
         eq("image_type_by_bytes", String.valueOf(Text.imageType(new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xe0}))
