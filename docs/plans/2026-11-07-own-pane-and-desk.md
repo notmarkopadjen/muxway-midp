@@ -373,4 +373,16 @@ Deviations:
 
 ## Test run
 
-Link to the recorded run: result, commit, logs, screenshots.
+Run 20261107-120931-ea1b78a, recorded as [issue #53](https://github.com/notmarkopadjen/muxway-midp/issues/53):
+273 tests passed, none failed, both builds, against the core's `main`
+(85d049b), on the branch at ea1b78a (the recording names baa1c1e, one
+commit later that changed this plan's text alone). S30's screenshots
+show the view blank before any answer and the second pane's rows after
+the late one was dropped; F47's the word over the fresh list; F48's the
+warm-up's settled line on the 2.0 build and the blank box on the 1.0;
+F49's the empty desk's word and the focused pane opened; S31's the
+forged desks refused. The two full runs before it, 20261107-105514 at
+c80faec (five menu picks took the first entry, beside the other suites)
+and 20261107-112927 at e6930ee (one, F49's *Back* after a desk open),
+are what the harness changes in the review answer; every failed test
+of both passed when run again. The 1.0 JAR is 30699 bytes.
