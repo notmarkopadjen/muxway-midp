@@ -1058,14 +1058,16 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     }
 
     private void read(String ifNoneMatch) throws IOException {
-        if (view == null) {
+        // The view asked for: an answer that comes after another pane was opened is nobody's and is dropped.
+        PaneView v = view;
+        if (v == null) {
             return;
         }
         // The rows as they are on the terminal; the phone wraps them itself.
-        String path = "panes/" + view.address + "?lines=" + Ui.LINES + "&width=400"
+        String path = "panes/" + v.address + "?lines=" + Ui.LINES + "&width=400"
             + (charset().length() > 0 ? "&" + charset() : "");
         int status = api.call(path, null, ifNoneMatch);
-        if (status == 304) {
+        if (status == 304 || v != view) {
             return;
         }
         if (status != 200) {
@@ -1073,7 +1075,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
             return;
         }
         etag = api.etag;
-        view.setText(api.body);
+        v.setText(api.body);
     }
 
     private void readInbox() throws IOException {
@@ -1370,13 +1372,25 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }.start();
     }
 
-    private void problem(int status) {
+    private void problem(int status) throws IOException {
         if (status == 401) {
             auto = false;
             prefs.token = "";
             prefs.save();
             alert(Api.problem(status) + " Enter a new one.", setup);
             fillSetup();
+            return;
+        }
+        if (status == 404 && view != null && job >= OPEN && job <= KEY) {
+            // The open pane is gone: its last rows are nobody's. The list again, then the word over it.
+            auto = false;
+            view = null;
+            if (Ui.HOSTS) {
+                // The 2.0 list shows itself only when it is the screen already.
+                display.setCurrent(panes);
+            }
+            list();
+            alert("This pane is gone.", panes);
             return;
         }
         Displayable next = view != null && display.getCurrent() != panes && job != LIST ? (Displayable) view : panes;
