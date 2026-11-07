@@ -360,9 +360,16 @@ Deviations:
   `"view": "panes"` before `"panes"`, and the first pane was never
   found. The lookup now wants the colon after the key; the sessions'
   and splits' answers (`address`, `error`) read as before.
-- F49 and S30 pause a second before opening the pane's menu (after the
-  read's ring, after an alert): the emulator's menu, opened under
-  either, took *Keys* for *Back* twice.
+- **The emulator's menu** took the first entry for the one asked
+  (*Keys* for *Back*, for *Refresh*, for *Pane*) five times in the
+  first full run, beside the Android and glasses suites on the same
+  machine, and once in three runs of F49 after a pane opened from the
+  desk, however long the pause before the menu. The harness gives the
+  menu 2.5 s to open instead of 1.8 (the owner's own remedy of
+  2026-11-04), S30 pauses a second after the give-up's alert, and F49
+  opens each desk from a phone started on the list, as the owner picks
+  a desk up, with no *Back* in between. Nothing in the product changed
+  for it.
 
 ## Test run
 
