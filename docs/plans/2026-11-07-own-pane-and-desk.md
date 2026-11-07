@@ -323,10 +323,46 @@ grep and gitleaks run before the push.
 
 ## Review (after implementation)
 
-- [ ] Diff matches the plan, deviations explained here
-- [ ] Security rules (AGENTS.md section 2) hold
-- [ ] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
-- [ ] Docs and diagrams updated
+- [x] Diff matches the plan, deviations explained here
+- [x] Security rules (AGENTS.md section 2) hold: nothing new is
+      written; the desk is one `GET` under the token, filtered by the
+      hub to the token's grants and checked on the phone against the
+      hub's own listing, so a forged desk opens nothing (S31) and a
+      reader gets what the hub leaves it, read-only (S32); a late
+      answer is dropped unless it is the open view's (S30); a `404`
+      sends the phone to the list and posts nothing (F47); the app asks
+      for the listed paths and no other (S19); no secret in any log
+      (S99)
+- [x] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
+- [x] Docs and diagrams updated
+
+Deviations:
+
+- **Both rules of #51 fitted the 1.0 build**: the late answer dropped
+  and *gone*, 96 bytes together, against the 25 the JAR had. What gave
+  way is what the plan named first: the 1.0 JAR's manifest leaves out
+  `MIDlet-Description` and `MIDlet-Info-URL` (the JAD keeps both; a
+  phone reads the JAD before the install) and carries
+  `Created-By: muxway` where `jar` would write its own version string.
+  The 1.0 JAR is 30699 bytes, 21 under the cap.
+- **A race left as it was**, for those bytes: the spinner thread reads
+  `view` twice a turn (`view != null`, then `view.busy(step)`), and
+  *gone* now sets `view` to null from the job thread. A null between
+  the two reads ends the spinner thread with an exception; the job it
+  spun for is finishing anyway, so the app loses nothing but that
+  thread's last turn. A local in the loop costs 16 bytes the 1.0 build
+  has not; it is the first thing to add when the cap allows.
+- **The core issue was not filed** by the agent (its session could not
+  create issues in the core); the gap and the proposal are in §1 and
+  §3 here and in the pull request for the owner to file.
+- **`Text.jsonString` looked for the key as a bare quoted word**, so a
+  value that equals the key was taken for it: the hub's desk says
+  `"view": "panes"` before `"panes"`, and the first pane was never
+  found. The lookup now wants the colon after the key; the sessions'
+  and splits' answers (`address`, `error`) read as before.
+- F49 and S30 pause a second before opening the pane's menu (after the
+  read's ring, after an alert): the emulator's menu, opened under
+  either, took *Keys* for *Back* twice.
 
 ## Test run
 
