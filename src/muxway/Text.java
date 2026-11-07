@@ -410,16 +410,41 @@ final class Text {
      * is not a string, or an escape is one the app does not know.
      */
     static String jsonString(String json, String key) {
-        int i = json.indexOf("\"" + key + "\"");
-        if (i < 0) {
+        return jsonText(json, jsonValue(json, key));
+    }
+
+    /**
+     * The first string of the array under key: a desk's first pane. Null
+     * without the key, an array or a string in it.
+     */
+    static String jsonFirst(String json, String key) {
+        int i = jsonValue(json, key);
+        if (i < 0 || i >= json.length() || json.charAt(i) != '[') {
             return null;
         }
-        i = blank(json, i + key.length() + 2);
-        if (i >= json.length() || json.charAt(i) != ':') {
-            return null;
+        return jsonText(json, blank(json, i + 1));
+    }
+
+    /**
+     * Where the value under key starts, after the colon and the blanks; -1
+     * without the key. A string that merely equals the key (a desk's
+     * "view": "panes" before its "panes") is passed over: a key has a colon
+     * after it.
+     */
+    private static int jsonValue(String json, String key) {
+        String quoted = "\"" + key + "\"";
+        for (int i = json.indexOf(quoted); i >= 0; i = json.indexOf(quoted, i + 1)) {
+            int j = blank(json, i + quoted.length());
+            if (j < json.length() && json.charAt(j) == ':') {
+                return blank(json, j + 1);
+            }
         }
-        i = blank(json, i + 1);
-        if (i >= json.length() || json.charAt(i) != '"') {
+        return -1;
+    }
+
+    /** The string that starts at i, unescaped; null when none does or it ends badly. */
+    private static String jsonText(String json, int i) {
+        if (i < 0 || i >= json.length() || json.charAt(i) != '"') {
             return null;
         }
         StringBuffer out = new StringBuffer();
@@ -452,6 +477,26 @@ final class Text {
             }
         }
         return null;
+    }
+
+    /**
+     * The pane the desk points at: its focused pane, else the first of its
+     * panes, else its window with a dot after it (the first pane of that
+     * window in the list is meant); null for a desk with none of these.
+     */
+    static String deskFocus(String json) {
+        String a = jsonString(json, "focused");
+        if (a == null || a.length() == 0) {
+            a = jsonFirst(json, "panes");
+        }
+        if (a == null || a.length() == 0) {
+            a = jsonString(json, "window");
+            if (a == null || a.length() == 0) {
+                return null;
+            }
+            a += ".";
+        }
+        return a;
     }
 
     private static int blank(String s, int i) {

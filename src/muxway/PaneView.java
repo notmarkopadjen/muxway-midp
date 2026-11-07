@@ -40,6 +40,9 @@ final class PaneView extends Canvas {
     boolean inbox;
     // Parked for later by its owner; the overlay says so.
     boolean later;
+    // True once the view holds rows of its own; before that it draws the warm-up or nothing, never a borrowed screen.
+    private boolean lit;
+    private boolean warmed;
     Lens[] lenses = new Lens[0];
     // The program in the pane, as the hub named it; Auto picks a lens by it first.
     String command = "";
@@ -90,6 +93,9 @@ final class PaneView extends Canvas {
         }
         Trace.show(title + ": " + text);
         synchronized (this) {
+            if (Ui.WARMUP) {
+                lit = true;
+            }
             raw = new String[n];
             System.arraycopy(all, 0, raw, 0, n);
             offset = 0;
@@ -221,9 +227,15 @@ final class PaneView extends Canvas {
         g.fillRect(0, 0, w, h);
         g.setColor(Ui.THEME ? theme.ink : 0x000000);
         g.setFont(font);
-        String[] v = visible();
-        for (int i = 0; i < n; i++) {
-            g.drawString(v[i], 0, y0 + i * lh, Graphics.TOP | Graphics.LEFT);
+        if (Ui.WARMUP && !lit) {
+            if (frame >= 0) {
+                warmUp(g, w, h);
+            }
+        } else {
+            String[] v = visible();
+            for (int i = 0; i < n; i++) {
+                g.drawString(v[i], 0, y0 + i * lh, Graphics.TOP | Graphics.LEFT);
+            }
         }
         if (info) {
             String lead = lead();
@@ -256,6 +268,23 @@ final class PaneView extends Canvas {
         } else if (frame >= 0 && frames != null && frames.length > 0) {
             g.drawImage(frames[frame % frames.length], w, 0, Graphics.TOP | Graphics.RIGHT);
         }
+    }
+
+    /**
+     * The tube coming on while a request runs and the view has no rows of its
+     * own: a line at mid-height, half the width then whole, opening into a
+     * band and settling to a line until the rows come. In the ink, 150 ms
+     * a step with the spinner. MIDP 2.0 build only.
+     */
+    private void warmUp(Graphics g, int w, int h) {
+        if (!warmed) {
+            warmed = true;
+            Trace.show("Warm-up");
+        }
+        int step = Math.min(frame, 4);
+        int wide = step == 0 ? w / 2 : w;
+        int tall = step == 2 ? 3 : step == 3 ? 5 : 1;
+        g.fillRect((w - wide) / 2, h / 2 - tall / 2, wide, tall);
     }
 
     /** The overlay's top row before the name: the write mark, then what the pane waits for. */

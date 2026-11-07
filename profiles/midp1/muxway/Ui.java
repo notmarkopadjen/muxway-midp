@@ -34,6 +34,12 @@ final class Ui {
     // The Commands list: fifty strings the cap has no room for.
     static final boolean COMMANDS = false;
 
+    // The warm-up while a pane view has nothing of its own: the 96x65 box stays blank, the bytes are not there.
+    static final boolean WARMUP = false;
+
+    // The desk's focused pane from the list's menu: a request and a reader the cap has no room for.
+    static final boolean DESK = false;
+
     private Ui() {
     }
 }

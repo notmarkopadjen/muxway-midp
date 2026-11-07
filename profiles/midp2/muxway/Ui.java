@@ -34,6 +34,12 @@ final class Ui {
     // The Commands list: a program's starters, sent with Enter.
     static final boolean COMMANDS = true;
 
+    // The warm-up while a pane view has nothing of its own and a request runs.
+    static final boolean WARMUP = true;
+
+    // Desk on the list's menu: the desk's focused pane opened from the hub's desk.
+    static final boolean DESK = true;
+
     private Ui() {
     }
 }
