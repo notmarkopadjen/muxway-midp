@@ -40,6 +40,14 @@ final class Ui {
     // Desk on the list's menu: the desk's focused pane opened from the hub's desk.
     static final boolean DESK = true;
 
+    // The pane known by its id from the listing's last column, checked against every read's Muxway-Pane,
+    // and followed to its new address when the host renumbers.
+    static final boolean IDS = true;
+
+    // An alert shown in its turn, after the screen changes asked for before it; in trace mode traced once it is
+    // on screen and once it has gone, by a thread that watches it.
+    static final boolean ALERT_SERIAL = true;
+
     private Ui() {
     }
 }

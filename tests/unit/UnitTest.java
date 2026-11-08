@@ -366,6 +366,9 @@ public final class UnitTest {
             + Text.local("http://[::1]:80") + Text.local("http://10.1.2.3") + Text.local("http://172.20.0.1") + Text.local("http://192.168.0.9"), "truetruetruetruetruetrue");
         eq("local_public_is_not", String.valueOf(Text.local("http://relay.example.com")) + Text.local("http://172.32.0.1") + Text.local("http://192.0.2.10"), "falsefalsefalse");
         eq("address_grammar", String.valueOf(Text.address("alice-laptop/work/1.0")) + Text.address("box/@logs") + Text.address("h/My_Sess.1/0.2"), "truetruetrue");
+        eq("pane_id_grammar", String.valueOf(Text.paneId("%3")) + Text.paneId("%123456789"), "truetrue");
+        eq("pane_id_rejects_junk", String.valueOf(Text.paneId("%")) + Text.paneId("%abc") + Text.paneId("3") + Text.paneId("%1234567890")
+            + Text.paneId("../x") + Text.paneId(""), "falsefalsefalsefalsefalsefalse");
         eq("address_rejects_injection", String.valueOf(Text.address("host/../admin")) + Text.address("host/a?x=1") + Text.address("Host/a/0.0")
             + Text.address("host") + Text.address("host/") + Text.address("host//a") + Text.address("host/a@b") + Text.address(repeat('h', 33) + "/a/0.0"), "falsefalsefalsefalsefalsefalsefalsefalse");
         eq("json_string_path", Text.jsonString("{\"path\":\"/home/alice/inbox/20261031-101500-abc123.jpg\",\"bytes\":48213}", "path"),

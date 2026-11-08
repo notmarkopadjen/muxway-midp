@@ -23,12 +23,15 @@ final class Inbox implements CommandListener {
     private final Command refresh = new Command("Refresh", Command.SCREEN, 1);
 
     private final Vector addresses = new Vector();
+    // The pane id of each row, from its seventh column; empty for a hub without ids.
+    private final Vector ids = new Vector();
     // String[] of a row's choices, or null; none on a pane the token cannot write, an answer is a write.
     private final Vector choices = new Vector();
     // The screen Back returns to: the pane list or a pane.
     Displayable from;
-    // The row being answered, and the choice picked.
+    // The row being answered, its pane's id, and the choice picked.
     String address = "";
+    String id = "";
     String choice = "";
 
     Inbox(Muxway app, Display display) {
@@ -48,6 +51,7 @@ final class Inbox implements CommandListener {
             list.delete(i);
         }
         addresses.removeAllElements();
+        ids.removeAllElements();
         choices.removeAllElements();
         StringBuffer shown = new StringBuffer();
         for (int i = 0; i < rows.length; i++) {
@@ -61,6 +65,7 @@ final class Inbox implements CommandListener {
             String label = Text.inboxLabel(f, name);
             list.append(label, null);
             addresses.addElement(f[0]);
+            ids.addElement(f.length > 6 && Text.paneId(f[6].trim()) ? f[6].trim() : "");
             choices.addElement(w && f.length > 4 ? Text.choices(f[4]) : null);
             shown.append(label).append('\n');
         }
@@ -78,9 +83,10 @@ final class Inbox implements CommandListener {
                 return;
             }
             address = (String) addresses.elementAt(i);
+            id = (String) ids.elementAt(i);
             String[] offered = (String[]) choices.elementAt(i);
             if (offered == null) {
-                app.open(address);
+                app.open(address, id);
                 return;
             }
             for (int j = answers.size() - 1; j >= 0; j--) {
@@ -97,7 +103,7 @@ final class Inbox implements CommandListener {
         } else if (d == answers && c == List.SELECT_COMMAND) {
             int i = answers.getSelectedIndex();
             if (i == answers.size() - 1) {
-                app.open(address);
+                app.open(address, id);
             } else if (i >= 0) {
                 choice = answers.getString(i);
                 display.setCurrent(list);

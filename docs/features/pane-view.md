@@ -178,20 +178,60 @@ answers `404` to a read or a key; the view says *This pane is gone.*,
 leaves, and the list is read again before the word is shown, so the
 word's dismissal lands on a fresh list. Nothing is drawn under the dead
 pane's address again: the host renumbers panes when one closes, and the
-rows at that address may be another pane's. The phone cannot tell a
-renumbered pane from the one it opened by itself, since the hub's text
-listing carries no `pane_id` (a gap reported to the core); until it
-does, the rule it keeps is this one.
+rows at that address may be another pane's.
+
+On the MIDP 2.0 build the view **knows its pane by id**: the hub's
+listing ends every row in the pane's id (`%3`), and every read answers
+with the id of the pane that answered (`Muxway-Pane`), on a `304` too.
+The view keeps the id of the pane it was opened for and checks each
+answer against it. When another pane answers at its address (the host
+renumbered), none of those rows is drawn or traced as the view's; the
+list is read again, quietly, and the view **follows** its pane to the
+address the list names, title, name and marks with it, and reads it
+there, so the next key reaches the pane the owner sees. A pane the list
+names nowhere is gone, with the word above. A second stranger at the
+new address is taken as gone too, so a hub or a relay that never agrees
+cannot send the phone round in a circle. A hub without the column or
+the header leaves the view knowing its pane by address, as before. The
+inbox opens a pane by the id its row carries, so a row read after a
+renumber opens the right pane even while the phone's list is older. The
+1.0 build keeps the address-only rule: the id needs bytes its JAR has
+not (see the [plan](../plans/2026-11-07-pane-id.md)).
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Opening: the view made, nothing of its own
-    Opening --> Rows: the pane's rows (its own answer)
+    [*] --> Opening: the view made, its pane's id from the list
+    Opening --> Rows: its own answer (Muxway-Pane is its id, or unknown)
     Opening --> Opening: a late answer for another pane: dropped
     Rows --> Rows: refresh, auto refresh, a key then the read
-    Rows --> Gone: 404, "This pane is gone.", the list again
-    Opening --> Gone: 404
+    Rows --> Moved: a stranger answers (another id; 2.0)
+    Opening --> Moved: a stranger answers (2.0)
+    Moved --> Rows: the list names the id at an address, the read there is its own
+    Moved --> Gone: the id is listed nowhere, or a stranger answers again
+    Rows --> Gone: 404
+    Gone --> [*]: "This pane is gone.", the list again
     note right of Opening: 2.0: the warm-up while a request runs; 1.0: blank
+```
+
+```mermaid
+sequenceDiagram
+    participant U as Owner
+    participant M as Muxway
+    participant H as Hub
+    U->>M: open work/0.1 (%3 from the list)
+    M->>H: GET /v1/panes/host/work/0.1
+    H-->>M: rows, Muxway-Pane: %3
+    Note over H: work/0.0 closes; the host renumbers: %3 is work/0.0, %7 is work/0.1
+    U->>M: 1 (refresh)
+    M->>H: GET /v1/panes/host/work/0.1
+    H-->>M: %7's rows, Muxway-Pane: %7
+    Note over M: a stranger: nothing drawn
+    M->>H: GET /v1/panes
+    H-->>M: … %3 at work/0.0, … %7 at work/0.1
+    Note over M: Follow %3 work/0.1 work/0.0
+    M->>H: GET /v1/panes/host/work/0.0
+    H-->>M: rows, Muxway-Pane: %3
+    M-->>U: its own rows under its own title
 ```
 
 ## Keypad
@@ -335,8 +375,14 @@ eighth fields, caps the entry, strips control characters from every
 body, and takes the writable mark from the hub. A title or an alias made
 to look like another pane (`work/0.0 (claude)` on a shell, `bob/work/0.0`
 as a name) misleads the eye only: the program in brackets is the hub's,
-the pane a row opens is its first column's, and the hub decides what
-the token may write on every input. The owner exposed that pane; a
+the pane a row opens is its first column's (or, on the 2.0 build, the
+pane with the id in its last column), and the hub decides what
+the token may write on every input. The id column and the
+`Muxway-Pane` header are taken as `%` and one to nine digits and
+nothing else; a header that is no id is unknown, one that names another
+pane makes the phone list once and read once more, then stop with the
+word, so a relay that forges it can hide a pane from the phone and no
+more, and the phone writes nothing it did not write before. The owner exposed that pane; a
 program there already holds a shell. The harness name comes from the
 command the hub gives, or the spark Claude Code puts first in its title:
 a program that puts the spark there is listed as Claude, and nothing more

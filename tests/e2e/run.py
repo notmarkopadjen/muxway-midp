@@ -97,11 +97,25 @@ def open_pane(phone):
 
 
 def dismiss(phone):
+    """Dismisses the alert on screen and waits until the screen behind it is back.
+
+    The 2.0 build traces an alert once it is on screen and again when it has gone: the emulator
+    switches screens on a thread of its own, so a click sent on the alert's call alone landed on the
+    screen the alert was about to cover (Refresh on the pane list, or worse), and a menu opened right
+    after the click on the alert lost its pick; both happened on a loaded machine (CI beside another
+    job), and the first in every run, since the emulator shows an alert at once but the screen asked
+    for just before it in its turn, on top of the alert. The 1.0 build has no room for the fix or
+    the thread that watches the alert: there the screen behind the alert is given a moment."""
+    if phone.profile == "midp1":
+        phone.click("right")
+        time.sleep(1.5)
+        return
+    lines = phone.trace()
+    alerts = [i for i, l in enumerate(lines) if l.startswith("Alert: ")]
+    check(alerts, "dismiss without an alert on the trace")
+    n = alerts[-1]
     phone.click("right")
-    # A menu opened right after the alert has picked the wrong entry, or
-    # none, on a loaded machine (CI beside another job): the screen behind
-    # the alert needs a moment to be current again.
-    time.sleep(1.5)
+    phone.expect("^Alert gone: " + re.escape(lines[n][7:]) + "$", "the alert gone", after=n)
 
 
 # --- security ---------------------------------------------------------------------
@@ -1860,6 +1874,120 @@ def f49(run, name, profile):
         if desk["view"] == "panes" and "focused" in desk:
             phone.shot("focused")
     check(not no_writes(relay), f"the phone wrote something: {no_writes(relay)}")
+
+
+def marked_third(core):
+    """Three panes, the third with a marker on its screen that must never show under another pane's title."""
+    three_panes(core)
+    core.tmux_cmd("send-keys", "-t", "work:0.2", "-l", "echo STRANGER-ROWS")
+    core.tmux_cmd("send-keys", "-t", "work:0.2", "Enter")
+
+
+@test("S33", "After the host renumbers, the view draws nothing of the pane that took its address, follows its own pane by id, and a key reaches it",
+      "e2e-security", profiles=("midp2",))
+def s33(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=marked_third)
+    own, other = core.pane_id("work:0.1"), core.pane_id("work:0.2")
+    phone.expect(r"^Panes: .*test-pane-3", "three panes")
+    phone.shot("panes")
+    phone.key("Down")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable " + re.escape(own) + "$", "the second pane, known by its id")
+    phone.expect(r"^work/0\.1: ", "its rows")
+    phone.shot("pane")
+    # The first pane closes: the host renumbers, and work/0.1 is the third pane now.
+    core.tmux_cmd("kill-pane", "-t", "work:0.0")
+    time.sleep(2)
+    n = len(phone.trace())
+    phone.click("k1")  # refresh
+    phone.expect(r"^Stranger " + re.escape(other) + " at " + HOST + r"/work/0\.1$", "the stranger seen", after=n)
+    phone.expect(r"^Follow " + re.escape(own) + " " + HOST + r"/work/0\.1 " + HOST + r"/work/0\.0$", "the follow", after=n)
+    phone.expect(r"^work/0\.0: ", "its own rows at the new address", after=n)
+    time.sleep(1)
+    check(not any(l.startswith("work/0.1: ") for l in phone.trace()[n:]), "the stranger's rows were traced as the view's")
+    check(not any("STRANGER" in l for l in phone.trace()[n:]), "the stranger's rows reached the trace")
+    check(not any("STRANGER" in r for r in phone.rows()), f"the stranger's rows on the screen: {phone.rows()}")
+    phone.shot("followed")
+    # A key after the renumber goes to the pane the owner sees, never to the pane that took its address.
+    m = len(relay.requests)
+    phone.click("k0")  # Keys
+    phone.expect(r"^Keys$", "the keys", after=n)
+    phone.click("select")  # Enter
+    wait_for("the key posted", lambda: any(r["method"] == "POST" for r in relay.requests[m:]), 10)
+    time.sleep(1)
+    posts = [r["path"] for r in relay.requests[m:] if r["method"] == "POST"]
+    check(posts == [f"/v1/panes/{HOST}/work/0.0/input"], f"posted: {posts}")
+    check(not any("work/0.1" in r["path"] for r in relay.requests[m:]), "the old address asked for after the follow")
+
+
+@test("S34", "A relay that forges Muxway-Pane: a header that is no id is unknown and the rows are the hub's; a stranger's id ends the view with a word, in two reads, nothing written",
+      "e2e-security", profiles=("midp2",))
+def s34(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-pane")
+    own = core.pane_id("work:0.0")
+    open_pane(phone)  # the first read answers with ../x in the header
+    for lie in ("%abc", "three hundred digits"):
+        n = len(phone.trace())
+        phone.click("k1")
+        phone.expect(r"^work/0\.0: ", f"rows drawn under the header {lie}", after=n)
+    check(not any(l.startswith("Stranger") for l in phone.trace()), "a header that is no id was taken for a pane")
+    n, m = len(phone.trace()), len(relay.requests)
+    phone.click("k1")  # a well-formed id of a pane the list does not hold, from here on
+    phone.expect(r"^Stranger %999999 at " + HOST + r"/work/0\.0$", "the forged id seen", after=n)
+    phone.expect(r"^Follow " + re.escape(own) + " " + HOST + r"/work/0\.0 " + HOST + r"/work/0\.0$", "the list names the pane where it was", after=n)
+    phone.expect(r"^Alert: This pane is gone", "the end after the second stranger", after=n)
+    phone.shot("forged")
+    check(not any(l.startswith("work/0.0: ") for l in phone.trace()[n:]), "rows of a forged answer were drawn")
+    reads = [r["path"] for r in relay.requests[m:] if r["path"].startswith(f"/v1/panes/{HOST}/")]
+    check(len(reads) == 2, f"reads after the lie: {reads}")
+    check(not no_writes(relay), f"something was written: {no_writes(relay)}")
+    paths = {r["path"].split("?")[0] for r in relay.requests}
+    check(paths <= {"/v1/hosts", "/v1/panes", f"/v1/panes/{HOST}/work/0.0"}, f"paths asked for: {paths}")
+
+
+@test("F50", "Auto on: the poll after a renumber follows the pane to its new address by itself, with no key pressed", "e2e-ui",
+      profiles=("midp2",))
+def f50(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, props={"Muxway-Refresh": "2"}, before=marked_third)
+    own = core.pane_id("work:0.1")
+    phone.expect(r"^Panes: .*test-pane-3", "three panes")
+    phone.key("Down")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable", "the second pane")
+    phone.expect(r"^work/0\.1: ", "its rows")
+    phone.pick("Auto")
+    phone.expect(r"^Alert: Auto refresh every 2 s", "auto on")
+    dismiss(phone)
+    time.sleep(3)  # a poll or two with If-None-Match, answered 304 with the pane's own id
+    core.tmux_cmd("kill-pane", "-t", "work:0.0")
+    n = len(phone.trace())
+    phone.expect(r"^Follow " + re.escape(own) + " " + HOST + r"/work/0\.1 " + HOST + r"/work/0\.0$", "the follow without a key", after=n, timeout=15)
+    phone.expect(r"^work/0\.0: ", "its rows at the new address", after=n)
+    time.sleep(1)
+    check(not any(l.startswith("work/0.1: ") or "STRANGER" in l for l in phone.trace()[n:]), "the stranger's rows reached the view")
+    check(not any("STRANGER" in r for r in phone.rows()), f"the stranger's rows on the screen: {phone.rows()}")
+    phone.shot("followed")
+
+
+@test("F51", "An inbox row opens its pane by id: after a renumber the phone's stale list still opens the pane the row names", "e2e-ui",
+      profiles=("midp2",))
+def f51(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, before=marked_third)
+    own = core.pane_id("work:0.1")
+    phone.expect(r"^Panes: .*test-pane-3", "three panes: the list the phone holds from here on")
+    core.notify("question", "deploy?", "work:0.1")
+    core.tmux_cmd("kill-pane", "-t", "work:0.0")  # the asking pane is work/0.0 now; the phone's list says work/0.1
+    time.sleep(2)
+    n = len(phone.trace())
+    phone.pick_list("Inbox")
+    phone.expect(r"^Inbox: .*deploy\?", "the row, at the pane's new address", after=n)
+    phone.shot("inbox")
+    phone.click("select")
+    phone.expect(r"^View " + HOST + r"/work/0\.1 writable " + re.escape(own) + "$", "opened by its id from the stale list", after=n)
+    phone.expect(r"^Follow " + re.escape(own) + " " + HOST + r"/work/0\.1 " + HOST + r"/work/0\.0$", "followed to where the hub has it", after=n)
+    phone.expect(r"^work/0\.0: ", "its rows", after=n)
+    check(not any(l.startswith("work/0.1: ") or "STRANGER" in l for l in phone.trace()[n:]), "the stranger's rows reached the view")
+    phone.shot("opened")
 
 
 # --- runner -------------------------------------------------------------------------

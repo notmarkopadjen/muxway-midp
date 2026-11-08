@@ -19,6 +19,9 @@ final class Api {
     int status;
     String body = "";
     String etag = "";
+    // Muxway-Pane: the id of the pane a read answered for, empty when the hub sent none; set by every
+    // exchange. MIDP 2.0 build only: unset and dropped from the 1.0 build, for the bytes.
+    String pane;
 
     Api(Prefs prefs, String agent) {
         this.prefs = prefs;
@@ -83,6 +86,10 @@ final class Api {
             status = c.getResponseCode();
             String tag = c.getHeaderField("ETag");
             etag = tag == null ? "" : tag;
+            if (Ui.IDS) {
+                String id = c.getHeaderField("Muxway-Pane");
+                pane = id == null ? "" : id.trim();
+            }
             // Read the answer even when it is empty: some phones release their
             // one HTTP connection only after the response stream was opened.
             byte[] raw = new byte[0];
