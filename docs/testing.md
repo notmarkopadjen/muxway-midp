@@ -95,7 +95,14 @@ with throwaway tokens, and a relay (`tests/e2e/harness.py`) that records
 every request and can misbehave on purpose: forge titles, lie about the
 charset or the mode, answer with a megabyte. The phone is the real JAR in
 the microemulator with `Muxway-Trace: 1` in its JAD, so the test reads what
-the app puts on screen from the emulator's standard output.
+the app puts on screen from the emulator's standard output. The emulator
+switches screens on a thread of its own, and shows an alert at once but
+every other screen in its turn, so the 2.0 build shows an alert through
+`callSerially`, after the screen changes asked for before it, and traces it
+once it is on screen and again once it has gone: a test dismisses an alert
+no earlier than it is there, and moves on no earlier than the screen behind
+it is back. The 1.0 JAR has no room for that; its tests give the screen a
+moment instead.
 
 ```mermaid
 flowchart LR

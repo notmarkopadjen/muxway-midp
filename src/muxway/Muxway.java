@@ -1591,11 +1591,44 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         alert(message, next);
     }
 
-    void alert(String text, Displayable next) {
-        Trace.show("Alert: " + text);
-        Alert a = new Alert("muxway", text, null, AlertType.INFO);
+    void alert(final String text, final Displayable next) {
+        final Alert a = new Alert("muxway", text, null, AlertType.INFO);
         a.setTimeout(Alert.FOREVER);
-        display.setCurrent(a, next);
+        if (!Ui.ALERT_SERIAL) {
+            Trace.show("Alert: " + text);
+            display.setCurrent(a, next);
+            return;
+        }
+        // In its turn, after the screen changes asked for before it: an emulator that shows an
+        // alert at once and every other screen in turn put the screen behind this one on top of it.
+        display.callSerially(new Runnable() {
+            public void run() {
+                display.setCurrent(a, next);
+                if (Trace.on) {
+                    traceAlert(a, text);
+                }
+            }
+        });
+    }
+
+    /**
+     * Traces the alert on screen, and once more when it has left it, so a test dismisses it no
+     * earlier than it is there and moves on no earlier than the screen behind it is back: the
+     * emulator switches screens on a thread of its own. Trace mode of the MIDP 2.0 build only.
+     */
+    private void traceAlert(final Alert a, final String text) {
+        Trace.show("Alert: " + text);
+        new Thread() {
+            public void run() {
+                for (int i = 0; display.getCurrent() == a && i < 30000; i++) {
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException e) {
+                    }
+                }
+                Trace.show("Alert gone: " + text);
+            }
+        }.start();
     }
 
     private static Image[] loadFrames() {

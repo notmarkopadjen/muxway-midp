@@ -44,6 +44,10 @@ final class Ui {
     // and followed to its new address when the host renumbers.
     static final boolean IDS = true;
 
+    // An alert shown in its turn, after the screen changes asked for before it; in trace mode traced once it is
+    // on screen and once it has gone, by a thread that watches it.
+    static final boolean ALERT_SERIAL = true;
+
     private Ui() {
     }
 }

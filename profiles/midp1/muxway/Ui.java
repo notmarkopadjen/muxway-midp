@@ -44,6 +44,11 @@ final class Ui {
     // over the cap (see docs/plans/2026-11-07-pane-id.md); the pane is known by its address.
     static final boolean IDS = false;
 
+    // An alert shown in its turn after the screen changes before it, and in trace mode watched as it comes and
+    // goes: a Runnable and a thread the cap has no room for. The alert is shown at once and traced as it is
+    // called for, and the tests give the screen a moment after dismissing one.
+    static final boolean ALERT_SERIAL = false;
+
     private Ui() {
     }
 }

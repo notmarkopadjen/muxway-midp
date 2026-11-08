@@ -97,11 +97,25 @@ def open_pane(phone):
 
 
 def dismiss(phone):
+    """Dismisses the alert on screen and waits until the screen behind it is back.
+
+    The 2.0 build traces an alert once it is on screen and again when it has gone: the emulator
+    switches screens on a thread of its own, so a click sent on the alert's call alone landed on the
+    screen the alert was about to cover (Refresh on the pane list, or worse), and a menu opened right
+    after the click on the alert lost its pick; both happened on a loaded machine (CI beside another
+    job), and the first in every run, since the emulator shows an alert at once but the screen asked
+    for just before it in its turn, on top of the alert. The 1.0 build has no room for the fix or
+    the thread that watches the alert: there the screen behind the alert is given a moment."""
+    if phone.profile == "midp1":
+        phone.click("right")
+        time.sleep(1.5)
+        return
+    lines = phone.trace()
+    alerts = [i for i, l in enumerate(lines) if l.startswith("Alert: ")]
+    check(alerts, "dismiss without an alert on the trace")
+    n = alerts[-1]
     phone.click("right")
-    # A menu opened right after the alert has picked the wrong entry, or
-    # none, on a loaded machine (CI beside another job): the screen behind
-    # the alert needs a moment to be current again.
-    time.sleep(1.5)
+    phone.expect("^Alert gone: " + re.escape(lines[n][7:]) + "$", "the alert gone", after=n)
 
 
 # --- security ---------------------------------------------------------------------
