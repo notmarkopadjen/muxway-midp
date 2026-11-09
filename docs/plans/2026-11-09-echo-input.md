@@ -1,6 +1,6 @@
 # Feature: a key's echo rides on the input's answer
 
-> Status: proposed 2026-11-09, reviewed with the pull request. Parity
+> Status: proposed 2026-11-09, implemented and reviewed with the pull request. Parity
 > with the core's *reading* row (`docs/ui-guideline.md` §1.4): the core
 > answers an input with the pane's screen when asked (`?read=1`), in
 > JSON since muxway#327 and in text mode with core PR muxway#329, which
@@ -227,11 +227,50 @@ already. UI tests take `typed`, `output` (F08), `keys`, `interrupted`
 
 ## Review (after implementation)
 
-- [ ] Diff matches the plan, deviations explained here
-- [ ] Security rules (AGENTS.md section 2) hold
-- [ ] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
-- [ ] Docs and diagrams updated
+- [x] Diff matches the plan, deviations explained here
+- [x] Security rules (AGENTS.md section 2) hold: the phone posts what
+      it posted, to the same path with a query the hub checks, and one
+      request fewer; the screen comes back only to a token that may
+      read the pane; the input's body is taken by the read's code (32
+      KiB, control characters dropped, `Muxway-Pane` checked), and a
+      relay that answers a key itself gets no further than with a read
+      (S35); a `200` without an `ETag` is never drawn (F52); only the
+      listed paths are asked for (S19); no secret in any log (S99)
+- [x] Privacy check passed: `scripts/prepush-check.sh` clean and diff read
+- [x] Docs and diagrams updated
+
+Deviations and measurements:
+
+- **The 1.0 build** took the feature as planned, and needed the bytes
+  the plan expected: with the feature alone it was 30909 bytes, 189
+  over the cap. The room came from the ten accessor methods javac wrote
+  for the spin thread's reach into the MIDlet's private fields and
+  methods (`display`, `view`, `frames`, `waitBar`, `busy`, `auto`,
+  `pollSerial`, `interval()`, `start()`, `giveUp()`): package-private
+  now, with no accessor, the same code otherwise. The 1.0 JAR is 30680
+  bytes, 40 under the cap.
+- **S19** is unchanged: the relay's list takes the input's path with a
+  query already, so nothing there had to move; the query is asserted
+  by F08, F09, S33, S35 and F52 instead.
+- **The harness relay** flushes its answer line as it writes it: it
+  never closed its log, so the last answer of a test was not on disk
+  while the test read the log, which the first run of F08 found.
+- **A fixture mode** of the relay (`claude` and its kin, `big`,
+  `garbage`) answers pane *reads* with its screen and leaves an input's
+  answer the hub's own; the tests that type into such a pane do not
+  look at the rows that come back, so none changed.
 
 ## Test run
 
-Link to the recorded run: result, commit, logs, screenshots.
+Run 20261109-190113-1df282b, recorded as
+[issue #60](https://github.com/notmarkopadjen/muxway-midp/issues/60):
+282 tests passed on both builds, none failed, against the core checkout
+of `echo-text-mode` at 7239d54 (core PR muxway#329). The full run
+before it, 20261109-182536-1df282b, failed in S03 (2.0), F11 (1.0) and
+F17 (both) while another repository's suite ran on the same machine:
+in each the pick from a soft-key menu landed an entry or two off (on
+Desk, on Keys), the menu slip the pane id plan recorded under load;
+the six passed alone, and in this run. In F17 the slip opened Keys and
+sent Enter, and the pane's real screen came back with the key's answer
+where a fixture read used to hide the slip, which is the feature at
+work, not a fault of it. The 1.0 JAR is 30680 bytes, 40 under the cap.
