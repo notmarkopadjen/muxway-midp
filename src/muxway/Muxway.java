@@ -37,7 +37,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
     private final Prefs prefs = new Prefs();
     private Api api;
-    private Display display;
+    Display display;
     private Files files;
     private Inbox inbox;
     // The image on its way up, while the UPLOAD job runs.
@@ -94,14 +94,14 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
     private int openNext = -1;
     // Desk on the list's menu: the desk's focused pane opened from the hub's desk; MIDP 2.0 build only.
     private Command deskCmd;
-    private PaneView view;
+    PaneView view;
     private final TextBox reply = new TextBox("Reply", "", 500, TextField.ANY);
     private final List keys = new List("Keys", List.IMPLICIT);
 
     private final Form wait = new Form("muxway");
     private final StringItem waitNote = new StringItem(null, "");
-    private final ImageItem waitBar = new ImageItem(null, null, ImageItem.LAYOUT_CENTER, "");
-    private Image[] frames;
+    final ImageItem waitBar = new ImageItem(null, null, ImageItem.LAYOUT_CENTER, "");
+    Image[] frames;
 
     private final Command ok = new Command("OK", Command.OK, 1);
     private final Command send = new Command("Send", Command.OK, 1);
@@ -127,10 +127,10 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
 
     private int job;
     private String arg;
-    private boolean busy;
+    boolean busy;
     private int serial;
-    private boolean auto;
-    private int pollSerial;
+    boolean auto;
+    int pollSerial;
     // The list re-read on the timer while it is shown; MIDP 2.0 build only.
     private boolean listAuto;
     private int listPollSerial;
@@ -694,7 +694,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         return h < 0 || ((String) hosts.flags.elementAt(h)).trim().length() == 0 || hosts.flag(h, word);
     }
 
-    private int interval() {
+    int interval() {
         return prefs.refresh > 0 ? prefs.refresh : 10;
     }
 
@@ -703,7 +703,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
      * MIDP has no request timeout, so the spinner gives up on a job that hangs
      * and the app stays usable; a late answer from it is then ignored.
      */
-    private synchronized boolean start(int what, String with) {
+    synchronized boolean start(int what, String with) {
         if (busy) {
             if (what != POLL && (!Ui.HOSTS || what != LISTQ)) {
                 alert("Still waiting for the last answer.", display.getCurrent());
@@ -742,7 +742,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         return true;
     }
 
-    private synchronized void giveUp(int which) {
+    synchronized void giveUp(int which) {
         if (busy && serial == which) {
             busy = false;
             serial++;
@@ -819,17 +819,18 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 break;
             case SEND:
             case TYPE:
-                if (input(Api.json("text", arg)) && (job == TYPE || input(Api.key("Enter")))) {
-                    display.setCurrent(view);
-                    Thread.sleep(500);
-                    read(null);
-                }
-                break;
             case KEY:
-                if (input(Api.key(arg))) {
+                // The last input of the job asks for the screen with its answer; the text before an Enter does not,
+                // its screen would never be shown. Without the screen (an older hub, a relay's ok) the pane is read
+                // after a moment, as before. A stranger answering may have ended the view: then there is nothing to show.
+                if ((job == KEY ? input(Api.key(arg), true)
+                    : input(Api.json("text", arg), job == TYPE) && (job == TYPE || input(Api.key("Enter"), true)))
+                    && view != null) {
                     display.setCurrent(view);
-                    Thread.sleep(300);
-                    read(null);
+                    if (!echoed) {
+                        Thread.sleep(job == KEY ? 300 : 500);
+                        read(null);
+                    }
                 }
                 break;
             case PROBE:
@@ -1100,16 +1101,25 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         return prefs.text == 1 ? "charset=latin1" : prefs.text == 2 ? "charset=ascii" : "";
     }
 
+    /** A pane read's query: the rows as they are on the terminal (the phone wraps them itself), in the Text setting's charset. */
+    private String query() {
+        return "lines=" + Ui.LINES + "&width=400" + (charset().length() > 0 ? "&" + charset() : "");
+    }
+
     private void read(String ifNoneMatch) throws IOException {
         // The view asked for: an answer that comes after another pane was opened is nobody's and is dropped.
         PaneView v = view;
         if (v == null) {
             return;
         }
-        // The rows as they are on the terminal; the phone wraps them itself.
-        String path = "panes/" + v.address + "?lines=" + Ui.LINES + "&width=400"
-            + (charset().length() > 0 ? "&" + charset() : "");
-        int status = api.call(path, null, ifNoneMatch);
+        shown(v, api.call("panes/" + v.address + "?" + query(), null, ifNoneMatch));
+    }
+
+    /**
+     * An answer that carries the pane's screen, or a 304: a read's, or an input's that asked for the screen. The
+     * rows go on the view they were asked for, and only while it is still the one open.
+     */
+    private void shown(PaneView v, int status) throws IOException {
         if (v != view) {
             return;
         }
@@ -1154,8 +1164,7 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
                 v.later = ((Boolean) later.elementAt(k)).booleanValue();
             }
             // One more read, checked once: the pane's own rows, or a stranger again, which is the end.
-            int status = api.call("panes/" + address + "?lines=" + Ui.LINES + "&width=400"
-                + (charset().length() > 0 ? "&" + charset() : ""), null, null);
+            int status = api.call("panes/" + address + "?" + query(), null, null);
             if (v != view) {
                 return;
             }
@@ -1424,8 +1433,22 @@ public final class Muxway extends MIDlet implements CommandListener, Runnable {
         }
     }
 
-    private boolean input(String json) throws IOException {
-        int status = api.call("panes/" + view.address + "/input", json, null);
+    // The last input's answer carried the pane's screen, so no read need follow it.
+    private boolean echoed;
+
+    /**
+     * Sends one input; with screen, asks the hub for the pane's screen with the answer (?read=1, the read's own
+     * query) and shows it as a read's rows. The hub's screen is a 200 with an ETag; a 200 without one is a relay
+     * standing in for a 204 (the WAP rule), and its body is never drawn. Returns false when the hub refused.
+     */
+    private boolean input(String json, boolean screen) throws IOException {
+        PaneView v = view;
+        int status = api.call("panes/" + v.address + "/input" + (screen ? "?read=1&" + query() : ""), json, null);
+        echoed = screen && status == 200 && api.etag.length() > 0;
+        if (echoed) {
+            shown(v, status);
+            return true;
+        }
         // 204 from a hub; 200 from a relay that cannot pass an empty answer on.
         if (status == 204 || status == 200) {
             return true;
