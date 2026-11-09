@@ -173,6 +173,40 @@ rows come. Never a borrowed screen, never a spinner in the box. The
 smallest screen stays blank, with the wait mark in its corner as for
 every request.
 
+### The key's echo
+
+A key, a typed text and the Enter after a sent text ask the hub for the
+pane's screen with their own answer (`?read=1`, with the read's own
+`lines`, `width` and `charset`): the hub lets the program echo for 30 ms,
+captures the pane and answers `200` with the rows as a text read gives
+them, `ETag` and `Muxway-Pane` with them. The rows take the path a
+read's take, filtered, wrapped and checked the same, and are drawn at
+once; no read follows, and the refresh timer goes on unchanged. A sent
+text is two requests, its text and the Enter: the text goes without the
+screen, since the Enter's answer follows at once and a screen is
+seconds of bytes over GPRS; the Enter's answer is the one shown. A hub
+or a host older than this answers `204`, and so does a token that may
+write the pane and not read it: the phone then waits a moment and reads
+the pane as before. A relay for WAP phones stands `200 ok` in for a
+`204` ([relay](relay.md)); the phone tells it from the hub's screen by
+the `ETag` the hub always sends and the stand-in never has, and reads
+as before; the `ok` is never drawn. Both builds take the echo.
+
+```mermaid
+sequenceDiagram
+    participant U as Owner
+    participant M as Muxway
+    participant H as Hub
+    U->>M: Send "make test"
+    M->>H: POST /v1/panes/host/work/0.0/input {"text": "make test"}
+    H-->>M: 204
+    M->>H: POST …/input?read=1&lines=120&width=400 {"key": "Enter"}
+    Note over H: the keys land; 30 ms; capture
+    H-->>M: 200 the rows, ETag, Muxway-Pane: %3
+    M-->>U: the rows at once
+    Note over M: an older hub: 204, then GET the pane as before
+```
+
 A pane that is gone, because its program ended or its owner closed it,
 answers `404` to a read or a key; the view says *This pane is gone.*,
 leaves, and the list is read again before the word is shown, so the
@@ -203,8 +237,9 @@ stateDiagram-v2
     [*] --> Opening: the view made, its pane's id from the list
     Opening --> Rows: its own answer (Muxway-Pane is its id, or unknown)
     Opening --> Opening: a late answer for another pane: dropped
-    Rows --> Rows: refresh, auto refresh, a key then the read
-    Rows --> Moved: a stranger answers (another id; 2.0)
+    Rows --> Rows: refresh, auto refresh, a key with the screen in its answer
+    Rows --> Rows: a key answered 204 (an older hub), then the read
+    Rows --> Moved: a stranger answers a read or a key (another id; 2.0)
     Opening --> Moved: a stranger answers (2.0)
     Moved --> Rows: the list names the id at an address, the read there is its own
     Moved --> Gone: the id is listed nowhere, or a stranger answers again
@@ -359,7 +394,14 @@ The view changes how rows are drawn and adds keypad routes to screens that
 exist already. `5`, `0` and `3` do nothing on a pane the token cannot
 write; the hub refuses a write anyway if a relay lied about that. No key sends
 anything but Enter; left and right open panes the list holds and nothing
-else. A Commands pick is the JAR's own string, sent as a reply is. Wrapping allocates one string per wrapped row, at most
+else. The screen that comes back with a key's answer is taken by the
+code that takes a read's: 32 KiB at most, control characters dropped,
+decoded by the `Content-Type` or the bytes, `Muxway-Pane` checked (2.0),
+so a relay that answers a key itself can do no more than it can to a
+read: a forged id costs one listing and one read and none of its rows
+is drawn (S35). The hub gives the screen only to a token that may read
+the pane. A `200` without an `ETag` is a relay's stand-in for `204` and
+is never drawn. A Commands pick is the JAR's own string, sent as a reply is. Wrapping allocates one string per wrapped row, at most
 32 KiB / 8 columns of them (by pixels, one character per row at the
 worst), within the smallest target's heap. The pane records in the
 settings store hold only addresses the hub listed, at most 32, and a line

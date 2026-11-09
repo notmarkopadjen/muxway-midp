@@ -127,7 +127,8 @@ stateDiagram-v2
   took the old one. See [the pane view](features/pane-view.md).
 - **Reply** is a `TextBox`; control characters are removed before sending.
   Send and Type return to the pane at once, where the wait mark runs
-  until the hub has answered; a refusal is shown over the pane.
+  until the hub has answered; the answer carries the pane's screen, so
+  no read follows it; a refusal is shown over the pane.
 - **Keys** lists the protocol's named keys in plain words.
 - **Settings** keeps the token in a password field and never shows it
   again; an empty field keeps the stored one.
@@ -146,11 +147,10 @@ sequenceDiagram
     M->>W: start, 45 s
     J->>S: POST input {"text": "make test"}
     S-->>J: 204 (or 200 ok through a relay)
-    J->>S: POST input {"key": "Enter"}
-    S-->>J: 204
-    J->>S: GET pane (text, width=400, charset for small phones)
-    S-->>J: 200 lines
+    J->>S: POST input?read=1&lines=…&width=400 {"key": "Enter"}
+    S-->>J: 200 lines, ETag, Muxway-Pane (the screen 30 ms after the keys landed)
     J->>M: show lines
+    Note over J,S: an older hub answers 204, a WAP relay 200 ok without an ETag: then GET pane as before
     W-->>M: nothing to do (job finished)
 ```
 
@@ -203,7 +203,10 @@ What a relay has to pass, and all the app ever asks for:
   `focused`, the first of `panes` and `window` from it.
 - Query parameters: `charset=latin1` or `charset=ascii` on `panes` and on a
   pane read when the Text setting is not Unicode; `lines=<n>` and
-  `width=400` on a pane read.
+  `width=400` on a pane read; `read=1` with the same three on an input
+  whose answer the phone shows (a key, a typed text, the Enter after a
+  sent text), which the hub answers with the screen as a read would
+  (`200`, `ETag`, `Muxway-Pane`) or, older, with `204`.
 - Headers: `X-Muxway-Token`, `Accept`, `User-Agent`, `If-None-Match` on
   auto refresh (and `ETag` from the answer), `Content-Type:
   application/json` and `Content-Length` on input, `Content-Type:

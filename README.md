@@ -52,7 +52,9 @@ little, and does it on purpose:
   with a key; the phone asks the hub for Latin-1 so a phone of that age
   can draw it.
 - **Reply** with the keypad's text, **send keys** (Enter, Tab, Shift-Tab,
-  Escape, arrows, Ctrl-C) from a menu, and scroll back.
+  Escape, arrows, Ctrl-C) from a menu, and scroll back. The pane's
+  screen comes back with the key's own answer, so a key costs one round
+  trip over GPRS, not two.
 - **The Claude Code lens**: the first [lens](docs/features/lenses.md)
   reshapes Claude Code's screen for the phone, hiding the chrome and
   keeping the conversation and the prompt; `*` reveals everything.
