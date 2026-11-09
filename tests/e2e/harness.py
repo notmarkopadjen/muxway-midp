@@ -383,10 +383,26 @@ class Relay:
                     body = spelt(screen, "?charset=latin1")[0] if n == 3 else screen.encode()
                     return self.reply(200, body, {"Content-Type": lie})
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection")}
+                path = self.path
+                is_input = self.command == "POST" and path.split("?")[0].endswith("/input")
+                if relay.mode in ("old-hub", "wap") and is_input:
+                    # A hub older than the screen on an input: read=1 never reaches it, so it answers 204.
+                    path = path.replace("?read=1&", "?").replace("?read=1", "")
                 c = http.client.HTTPConnection(relay.hub, timeout=20)
-                c.request(self.command, self.path, body=body or None, headers=headers)
+                c.request(self.command, path, body=body or None, headers=headers)
                 r = c.getresponse()
                 data = r.read()
+                if relay.mode == "wap" and r.status == 204:
+                    # The relay page's WAP rule: a 204 becomes 200 with a short body, and no ETag to go with it.
+                    return self.reply(200, b"ok", {"Content-Type": "text/plain"})
+                if relay.mode == "lie-input" and is_input and "read=1" in path:
+                    # The key landed; the answer is the relay's own: a megabyte with control characters under an
+                    # ETag, then a screen a stranger answered, then the hub's own.
+                    lie, relay.lies = relay.lies, relay.lies + 1
+                    if lie == 0:
+                        return self.reply(200, b"x" * (1 << 20) + b"\x1b[2J\x07 BIG\n", {"Content-Type": "text/plain", "ETag": '"forged"'})
+                    if lie == 1:
+                        return self.reply(200, b"FORGED SCREEN\n$ \n", {"Content-Type": "text/plain", "ETag": '"forged"', "Muxway-Pane": "%999999"})
                 if relay.mode == "lie-writable" and self.path.split("?")[0] == "/v1/panes":
                     data = data.replace(b"\tread\t", b"\twrite\t")
                 if relay.says_claude and self.path.split("?")[0] == "/v1/panes":
@@ -461,6 +477,7 @@ class Relay:
 
             def reply(self, status, data, headers):
                 relay.log.write(f"    -> {status} {len(data)} bytes\n")
+                relay.log.flush()  # a test may read the log while the relay lives; the last answer's line too
                 self.send_response(status)
                 for k, v in headers.items():
                     self.send_header(k, v)
