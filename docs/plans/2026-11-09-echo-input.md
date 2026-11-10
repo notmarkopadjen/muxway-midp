@@ -274,3 +274,9 @@ the six passed alone, and in this run. In F17 the slip opened Keys and
 sent Enter, and the pane's real screen came back with the key's answer
 where a fixture read used to hide the slip, which is the feature at
 work, not a fault of it. The 1.0 JAR is 30680 bytes, 40 under the cap.
+
+The pull request's CI run, against the core's `main` before muxway#329
+was merged, failed F08, F09, S33 and S35 as the plan says an older hub
+must: the hub answered `204` and the phone read after each input, which
+those four assert it need not. Rerun after the merge (core `main` at
+e5cffb3, 2026-11-10): 282 tests passed, none failed.
