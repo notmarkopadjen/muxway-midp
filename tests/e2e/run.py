@@ -96,6 +96,21 @@ def open_pane(phone):
     phone.shot("pane")
 
 
+def echo_query(profile):
+    """The query an input that asks for the screen carries: the read's own."""
+    return r"\?read=1&lines=" + ("40" if profile == "midp1" else "120") + r"&width=400" + (r"&charset=latin1" if profile == "midp1" else "") + "$"
+
+
+def pane_reads(relay, since=0):
+    """The reads of a pane since the n-th request."""
+    return [r["path"] for r in relay.requests[since:] if r["method"] == "GET" and r["path"].startswith(f"/v1/panes/{HOST}/")]
+
+
+def inputs(relay, since=0):
+    """The inputs posted since the n-th request."""
+    return [r["path"] for r in relay.requests[since:] if r["method"] == "POST" and "/input" in r["path"]]
+
+
 def dismiss(phone):
     """Dismisses the alert on screen and waits until the screen behind it is back.
 
@@ -301,10 +316,18 @@ def f08(run, name, profile):
     # No character twice in a row: the emulator drops the second one.
     phone.type("echo hi-$(expr 40 + 2)")
     phone.shot("typed")
+    m = len(relay.requests)
     phone.click("right")  # Send
     wait_for("echo output", lambda: "hi-42" in core.pane())
-    phone.expect(r"^work/0\.0: .*hi-42", "refreshed pane shows the output")
+    phone.expect(r"^work/0\.0: .*hi-42", "the pane shows the output")
     phone.shot("output")
+    # The screen came with the Enter's answer: the text posted plain, the Enter with the read's query, no read.
+    time.sleep(1.5)
+    sent = inputs(relay, m)
+    check(len(sent) == 2 and sent[0].endswith("/input") and re.search(echo_query(profile), sent[1]), f"posted: {sent}")
+    check(not pane_reads(relay, m), f"the pane was read after the input: {pane_reads(relay, m)}")
+    log = (run.out / "logs" / name / "relay.log").read_text().rsplit("input?read=1", 1)[1].split("\n")
+    check(len(log) > 1 and " -> 200 " in log[1], f"the Enter was not answered with the screen: {log[1:2]}")
 
 
 @test("F09", "Keys: Ctrl-C stops a running command", "e2e-ui")
@@ -317,9 +340,15 @@ def f09(run, name, profile):
     phone.pick("Keys")
     phone.shot("keys")
     phone.key("Down")  # Ctrl-C is second
+    n, m = len(phone.trace()), len(relay.requests)
     phone.click("select")
     wait_for("sleep interrupted", lambda: core.command() == "bash")
+    phone.expect(r"^work/0\.0: ", "the screen from the key's answer", after=n)
     phone.shot("interrupted")
+    time.sleep(1.5)
+    sent = inputs(relay, m)
+    check(len(sent) == 1 and re.search(echo_query(profile), sent[0]), f"posted: {sent}")
+    check(not pane_reads(relay, m), f"the pane was read after the key: {pane_reads(relay, m)}")
 
 
 @test("F10", "Auto refresh: unchanged pane answered 304", "e2e")
@@ -1916,8 +1945,9 @@ def s33(run, name, profile):
     wait_for("the key posted", lambda: any(r["method"] == "POST" for r in relay.requests[m:]), 10)
     time.sleep(1)
     posts = [r["path"] for r in relay.requests[m:] if r["method"] == "POST"]
-    check(posts == [f"/v1/panes/{HOST}/work/0.0/input"], f"posted: {posts}")
+    check(len(posts) == 1 and re.match(f"/v1/panes/{HOST}/work/0.0/input" + echo_query(profile), posts[0]), f"posted: {posts}")
     check(not any("work/0.1" in r["path"] for r in relay.requests[m:]), "the old address asked for after the follow")
+    check(not pane_reads(relay, m), f"the pane was read after the key, whose answer carried the screen: {pane_reads(relay, m)}")
 
 
 @test("S34", "A relay that forges Muxway-Pane: a header that is no id is unknown and the rows are the hub's; a stranger's id ends the view with a word, in two reads, nothing written",
@@ -1943,6 +1973,51 @@ def s34(run, name, profile):
     check(not no_writes(relay), f"something was written: {no_writes(relay)}")
     paths = {r["path"].split("?")[0] for r in relay.requests}
     check(paths <= {"/v1/hosts", "/v1/panes", f"/v1/panes/{HOST}/work/0.0"}, f"paths asked for: {paths}")
+
+
+@test("S35", "A relay that answers an input itself: a megabyte with control characters is cut and filtered; a stranger's Muxway-Pane draws nothing, one listing and one read follow; nothing written but the keys",
+      "e2e-security", profiles=("midp2",))
+def s35(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="lie-input")
+    own = core.pane_id("work:0.0")
+    open_pane(phone)
+    m = len(relay.requests)
+    # The first key's answer: a megabyte of x with control characters. Cut at 32 KiB, filtered, drawn; the app stays up.
+    n = len(phone.trace())
+    phone.click("k0")  # Keys
+    phone.expect(r"^Keys$", "the keys", after=n)
+    phone.click("select")  # Enter
+    shown = phone.expect(r"^work/0\.0: x", "the big answer drawn, cut", after=n)
+    check(len(shown) < 40000, f"more than 32 KiB drawn: {len(shown)} characters")
+    check("\x1b" not in shown and "\x07" not in shown, "control characters reached the view")
+    phone.shot("big")
+    # The second: a screen marked FORGED under a stranger's id. Nothing of it drawn; the list, one read, its own rows.
+    n = len(phone.trace())
+    phone.click("k0")
+    phone.expect(r"^Keys$", "the keys again", after=n)
+    k = len(relay.requests)
+    phone.click("select")
+    phone.expect(r"^Stranger %999999 at " + HOST + r"/work/0\.0$", "the forged id seen", after=n)
+    phone.expect(r"^Follow " + re.escape(own) + " " + HOST + r"/work/0\.0 " + HOST + r"/work/0\.0$", "the list names the pane where it was", after=n)
+    phone.expect(r"^work/0\.0: \$", "its own rows read once more", after=n)
+    time.sleep(1)
+    check(not any("FORGED" in l for l in phone.trace()[n:]), "the forged screen reached the trace")
+    check(not any("FORGED" in r for r in phone.rows()), f"the forged screen on the screen: {phone.rows()}")
+    reads = [r["path"].split("?")[0] for r in relay.requests[k:] if r["method"] == "GET"]
+    check(reads == ["/v1/hosts", "/v1/panes", f"/v1/panes/{HOST}/work/0.0"], f"asked after the forged answer: {reads}")
+    phone.shot("forged")
+    # The third: the hub's own answer, drawn at once.
+    n, k = len(phone.trace()), len(relay.requests)
+    phone.click("k0")
+    phone.expect(r"^Keys$", "the keys once more", after=n)
+    phone.click("select")
+    phone.expect(r"^work/0\.0: \$", "the hub's screen from the key's answer", after=n)
+    time.sleep(1)
+    check(not pane_reads(relay, k), f"the pane was read after the key: {pane_reads(relay, k)}")
+    phone.shot("own")
+    sent = inputs(relay, m)
+    check(len(sent) == 3 and all(re.search(echo_query(profile), p) for p in sent), f"posted: {sent}")
+    check(no_writes(relay) == [f"POST {p}" for p in sent], f"something else was written: {no_writes(relay)}")
 
 
 @test("F50", "Auto on: the poll after a renumber follows the pane to its new address by itself, with no key pressed", "e2e-ui",
@@ -1991,6 +2066,38 @@ def f51(run, name, profile):
 
 
 # --- runner -------------------------------------------------------------------------
+
+@test("F52", "An older hub answers an input with 204, a WAP relay with 200 ok: the phone reads the pane as before and never draws the ok", "e2e-ui")
+def f52(run, name, profile):
+    core, relay, phone, tok = setup(run, name, profile, mode="old-hub")
+    open_pane(phone)
+    # A key: asked with the screen, answered 204 by the older hub; the read of before follows.
+    n, m = len(phone.trace()), len(relay.requests)
+    phone.click("k0")  # Keys
+    phone.expect(r"^Keys$", "the keys", after=n)
+    phone.click("select")  # Enter
+    phone.expect(r"^work/0\.0: ", "the rows from the read after the key", after=n)
+    time.sleep(1)
+    sent = inputs(relay, m)
+    check(len(sent) == 1 and re.search(echo_query(profile), sent[0]), f"posted: {sent}")
+    check(len(pane_reads(relay, m)) == 1, f"reads after the key: {pane_reads(relay, m)}")
+    check(" -> 204 " in (run.out / "logs" / name / "relay.log").read_text(), "the older hub's 204 never came")
+    phone.shot("old-hub")
+    # The WAP way: the 204 becomes 200 ok without an ETag. The ok is no screen; the read of before follows.
+    relay.mode = "wap"
+    phone.click("k5")  # Reply
+    phone.type("echo w-$(expr 1 + 2)")
+    n, m = len(phone.trace()), len(relay.requests)
+    phone.click("right")  # Send
+    wait_for("echo output", lambda: "w-3" in core.pane())
+    phone.expect(r"^work/0\.0: .*w-3", "the rows from the read after the Enter", after=n)
+    time.sleep(1)
+    sent = inputs(relay, m)
+    check(len(sent) == 2 and sent[0].endswith("/input") and re.search(echo_query(profile), sent[1]), f"posted: {sent}")
+    check(len(pane_reads(relay, m)) == 1, f"reads after the Enter: {pane_reads(relay, m)}")
+    check(not any(re.match(r"^work/0\.0: ok$", l) for l in phone.trace()[n:]), "the relay's ok was drawn as the screen")
+    phone.shot("wap")
+
 
 def unit_tests(run, results):
     """Java SE tests of the text helpers: what the screens show and what is sent."""

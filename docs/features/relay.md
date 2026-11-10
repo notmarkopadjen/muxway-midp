@@ -18,7 +18,11 @@ plain HTTP from the phone and forwards it to the hub over HTTPS.
   `Content-Type` and the body, and back the status, the body,
   `Content-Type`, `ETag` and `Muxway-Pane` (the id of the pane a read
   answered for; a relay that drops it costs the phone the check that
-  its rows are its own pane's). These are the only paths the app
+  its rows are its own pane's). An input asked with `?read=1` is
+  answered `200` with the pane's screen as a text read gives it, `ETag`
+  and `Muxway-Pane` with it: pass the body and both headers back as on
+  a read, so the phone draws the key's echo at once instead of reading
+  the pane again. These are the only paths the app
   requests (see [the protocol features
   used](../ARCHITECTURE.md#protocol-features-used)), and the example
   below names each of them and nothing wider. Nothing else: a relay
@@ -46,7 +50,10 @@ its active WAP settings):
    key, `304` for an unchanged pane) may never complete on the phone. Turn
    `204` into `200` with a short body such as `ok`, and do not forward
    `If-None-Match`, so the hub never answers `304`. The app accepts `200`
-   for input.
+   for input. Give the stand-in no `ETag`: the hub's screen on an input
+   always carries one, and that is how the phone tells the screen, which
+   it draws, from an `ok`, which it never draws (it reads the pane
+   instead, as it always did).
 
 The app sends its token in `X-Muxway-Token` because WAP stacks rewrite
 `Authorization: Bearer` into `Basic`; a relay passes that header on as it is.
